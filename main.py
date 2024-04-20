@@ -35,7 +35,7 @@ models.Base.metadata.create_all(bind=engine)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(
 	tokenUrl="token",
-	scopes={"admin": "Add, edit and delete information.", "manager": "Create and read information.", "user": "Read information."}
+	scopes={"admin": "Add, edit and delete information.", "profesor": "Create and read information.", "cliente": "Create and read information.", "estudiante": "Create and read information.", "usuario": "Only read information"}
 )
 #----------------------
 #Create our main app
@@ -78,8 +78,11 @@ SECRET_KEY = config.SECRET_KEY
 APP_NAME = config.APP_NAME
 ACCESS_TOKEN_EXPIRE_MINUTES = config.ACCESS_TOKEN_EXPIRE_MINUTES
 ADMIN_USER = config.ADMIN_USER
-ADMIN_NAME = config.ADMIN_NAME
-ADMIN_EMAIL = config.ADMIN_EMAIL
+ADMIN_NOMBRE = config.ADMIN_NOMBRE
+ADMIN_PAPELLIDO = config.ADMIN_PAPELLIDO
+ADMIN_SAPELLIDO = config.ADMIN_SAPELLIDO
+ADMIN_CI = config.ADMIN_CI
+ADMIN_CORREO = config.ADMIN_CORREO
 ADMIN_PASS = config.ADMIN_PASS
 
 # Dependency
@@ -186,7 +189,9 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 		)
 	access_token_expires = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
 	print(form_data.scopes)
-	print(user.role)
+	
+	print(user.role) #Prin my roles to confirm them
+	
 	access_token = create_access_token(
 		data={"sub": user.username, "scopes": user.role},   #form_data.scopes
 		expires_delta=access_token_expires
@@ -202,11 +207,11 @@ async def get_restricted_user(current_user: Annotated[schemas.User, Depends(get_
     return current_user
 	
 @app.get("/get_authenticated_admin_resources", response_model=schemas.User)
-async def get_authenticated_admin_resources(current_user: Annotated[schemas.User, Security(get_current_active_user, scopes=["manager"])]):
+async def get_authenticated_admin_resources(current_user: Annotated[schemas.User, Security(get_current_active_user, scopes=["profesor"])]):
     return current_user
 	
 @app.get("/get_authenticated_edition_resources", response_model=schemas.User)
-async def get_authenticated_edition_resources(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])]):
+async def get_authenticated_edition_resources(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["cliente"])]):
     return current_user
 	
 @app.get("/get_user_status", response_model=schemas.User)
@@ -227,9 +232,12 @@ async def create_owner(db: Session = Depends(get_db)): #Por el momento no tiene 
 		
 	db_user = models.User(
 		username=config.ADMIN_USER, 
-		full_name=config.ADMIN_NAME,
-		email=config.ADMIN_EMAIL,
-		role=["admin","manager","user"],
+		nombre=config.ADMIN_NOMBRE,
+		primer_appellido=config.ADMIN_PAPELLIDO,
+		segundo_appellido=config.ADMIN_SAPELLIDO,
+		ci=config.ADMIN_CI,
+		email=config.ADMIN_CORREO,
+		role=["admin","profesor","cliente","estudiante","usuario"],
 		disable=False,
 		hashed_password=pwd_context.hash(config.ADMIN_PASS)		
 	)
@@ -240,7 +248,7 @@ async def create_owner(db: Session = Depends(get_db)): #Por el momento no tiene 
 	
 @app.post("/create_user/", status_code=status.HTTP_201_CREATED)  
 async def create_user(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-				user: schemas.UserInDB, db: Session = Depends(get_db)): 
+				user: schemas.UserAdd, db: Session = Depends(get_db)): 
 	if db.query(models.User).filter(models.User.username == user.username).first() :
 		raise HTTPException( 
 			status_code=400,
@@ -248,10 +256,13 @@ async def create_user(current_user: Annotated[schemas.User, Depends(get_current_
 		)	
 	db_user = models.User(
 		username=user.username, 
-		full_name=user.full_name,
+		nombre=user.nombre,
+		primer_appellido=user.primer_appellido,
+		segundo_appellido=user.segundo_appellido,
+		ci=user.ci,
 		email=user.email,
 		role=user.role,
-		disable=False,
+		disable=True,
 		hashed_password=pwd_context.hash(user.hashed_password)
 	)
 	db.add(db_user)
@@ -264,6 +275,7 @@ async def read_users(current_user: Annotated[schemas.User, Depends(get_current_a
 		skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    	
 	db_users = db.query(models.User).offset(skip).limit(limit).all()    
 	return db_users
+	
 
 @app.put("/update_user/{username}", status_code=status.HTTP_201_CREATED) 
 async def update_user(current_user: Annotated[schemas.User, Depends(get_current_active_user)], 
@@ -271,8 +283,10 @@ async def update_user(current_user: Annotated[schemas.User, Depends(get_current_
 	db_user = db.query(models.User).filter(models.User.username == username).first()
 	if db_user is None:
 		raise HTTPException(status_code=404, detail="User not found")
-	db_user.username=new_user.username
-	db_user.full_name=new_user.full_name
+	db_user.nombre=new_user.nombre	
+	db_user.primer_appellido=new_user.primer_appellido
+	db_user.segundo_appellido=new_user.segundo_appellido
+	db_user.ci=new_user.ci	
 	db_user.email=new_user.email	
 	db_user.role=new_user.role
 	db.commit()
@@ -303,7 +317,7 @@ async def delete_user(current_user: Annotated[schemas.User, Depends(get_current_
 	return {"Deleted": "Delete User Successfuly"}
 	
 @app.put("/reset_password/{username}", status_code=status.HTTP_201_CREATED) 
-async def reset_password(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def reset_password(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])],
 				username: str, password: schemas.UserPassword, db: Session = Depends(get_db)):
 	db_user = db.query(models.User).filter(models.User.username == username).first()
 	if db_user is None:
@@ -314,7 +328,7 @@ async def reset_password(current_user: Annotated[schemas.User, Security(get_curr
 	return {"Result": "Password Updated Successfuly"}
 	
 @app.put("/reset_password_by_user/{username}", status_code=status.HTTP_201_CREATED) 
-async def reset_password_by_user(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def reset_password_by_user(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])],
 				username: str, password: schemas.UserResetPassword, db: Session = Depends(get_db)):
 				
 	if not verify_password(password.actualpassword, current_user.hashed_password): 
@@ -332,7 +346,7 @@ async def reset_password_by_user(current_user: Annotated[schemas.User, Security(
 ####  ENTIDAD ORIGEN  #######
 #############################
 @app.post("/crear_entidad_origen/", status_code=status.HTTP_201_CREATED)
-async def crear_entidad_origen(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_entidad_origen(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					ent_origen: schemas.Entidad_Origen, db: Session = Depends(get_db)):
 	try:
 		db_ent_origen = models.Entidad_Origen(
@@ -352,15 +366,15 @@ async def crear_entidad_origen(current_user: Annotated[schemas.User, Security(ge
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Entidad origen")		
 
-@app.get("/leer_entidades_origen/")  
-async def leer_entidades_origen(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_entidades_origen/", status_code=status.HTTP_201_CREATED)  
+async def leer_entidades_origen(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
 	db_entidades = db.query(models.Entidad_Origen).all()	
 	
 	return db_entidades
 	
-@app.delete("/eliminar_entidad_origen/{id}") 
-async def eliminar_entidad_origen(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_entidad_origen/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_entidad_origen(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_entidad = db.query(models.Entidad_Origen
 						).filter(models.Entidad_Origen.id_entidad_origen == id
@@ -371,11 +385,30 @@ async def eliminar_entidad_origen(current_user: Annotated[schemas.User, Security
 	db.commit()
 	return {"Result": "Entidad origen eliminada satisfactoriamente"}
 	
+@app.put("/actualizar_entidad_origen/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_entidad_origen(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, entidad_nueva: schemas.Entidad_Origen, db: Session = Depends(get_db)):
+	
+	db_entidad_origen = db.query(models.Entidad_Origen).filter(models.Entidad_Origen.id_entidad_origen == id).first()
+	
+	if db_entidad_origen is None:
+		raise HTTPException(status_code=404, detail="La entidad seleccionada no existen en la base de datos")
+	
+	db_entidad_origen.org_nombre=entidad_nueva.org_nombre
+	db_entidad_origen.org_siglas=entidad_nueva.org_siglas
+	db_entidad_origen.org_nivel_tecnologico=entidad_nueva.org_nivel_tecnologico	
+	db_entidad_origen.org_transporte=entidad_nueva.org_transporte
+	db_entidad_origen.org_trab_remoto=entidad_nueva.org_trab_remoto
+	
+	db.commit()
+	db.refresh(db_entidad_origen)	
+	return {"Result": "Entidad origen actualizada satisfactoriamente"}	
+	
 #############################
 ####  ENTIDAD DESTINO #######
 #############################
 @app.post("/crear_entidad_destino/", status_code=status.HTTP_201_CREATED)
-async def crear_entidad_destino(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_entidad_destino(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					ent_destino: schemas.Entidad_Destino, db: Session = Depends(get_db)):
 	try:
 		db_ent_destino = models.Entidad_Destino(
@@ -396,15 +429,15 @@ async def crear_entidad_destino(current_user: Annotated[schemas.User, Security(g
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Entidad_destino")		
 
-@app.get("/leer_entidades_destino/")  
-async def leer_entidades_destino(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_entidades_destino/", status_code=status.HTTP_201_CREATED)  
+async def leer_entidades_destino(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
 	db_entidades = db.query(models.Entidad_Destino).all()	
 	
 	return db_entidades
 	
-@app.delete("/eliminar_entidad_destino/{id}") 
-async def eliminar_entidad_destino(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_entidad_destino/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_entidad_destino(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_entidad = db.query(models.Entidad_Destino
 						).filter(models.Entidad_Destino.id_entidad_destino == id
@@ -415,19 +448,34 @@ async def eliminar_entidad_destino(current_user: Annotated[schemas.User, Securit
 	db.commit()
 	return {"Result": "Entidad destino eliminada satisfactoriamente"}
 	
+@app.put("/actualizar_entidad_destino/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_entidad_destino(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, entidad_nueva: schemas.Entidad_Destino, db: Session = Depends(get_db)):
+	
+	db_entidad_destino = db.query(models.Entidad_Destino).filter(models.Entidad_Destino.id_entidad_destino == id).first()
+	
+	if db_entidad_destino is None:
+		raise HTTPException(status_code=404, detail="La entidad seleccionada no existen en la base de datos")
+	
+	db_entidad_destino.dest_nombre=entidad_nueva.dest_nombre
+	db_entidad_destino.dest_siglas=entidad_nueva.dest_siglas
+	db_entidad_destino.dest_nivel_tecnologico=entidad_nueva.dest_nivel_tecnologico	
+	db_entidad_destino.dest_transporte=entidad_nueva.dest_transporte
+	db_entidad_destino.dest_trab_remoto=entidad_nueva.dest_trab_remoto
+	db_entidad_destino.dest_experiencia=entidad_nueva.dest_experiencia
+	
+	db.commit()
+	db.refresh(db_entidad_destino)	
+	return {"Result": "Entidad Destino actualizada satisfactoriamente"}	
+	
 #############################
 #######  PROFESOR  ##########
 #############################
 @app.post("/crear_profesor/", status_code=status.HTTP_201_CREATED)
-async def crear_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_profesor(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					profesor: schemas.Profesor, db: Session = Depends(get_db)):
 	try:
 		db_profesor = models.Profesor(
-			prf_ci = profesor.prf_ci,
-			prf_nombre = profesor.prf_nombre,
-			prf_primer_appellido = profesor.prf_primer_appellido,
-			prf_segundo_appellido = profesor.prf_segundo_appellido,
-			prf_correo = profesor.prf_correo,
 			prf_genero = profesor.prf_genero,
 			prf_estado_civil = profesor.prf_estado_civil,  #Soltero, Casado, Divorciado, Viudo
 			prf_numero_empleos = profesor.prf_numero_empleos,
@@ -440,11 +488,19 @@ async def crear_profesor(current_user: Annotated[schemas.User, Security(get_curr
 			prf_categoria_cientifica = profesor.prf_categoria_cientifica,  #Ingeniero, Licenciado, Master, Doctor, Tecnico
 			prf_experiencia_practicas = profesor.prf_experiencia_practicas, 
 			prf_numero_est_atendidos = profesor.prf_numero_est_atendidos,  #Numero de estudiantes atendidos en el pasado
-			prf_entidad_id = profesor.prf_entidad_id		
+			prf_entidad_id = profesor.prf_entidad_id,	
+			user_profesor_id = profesor.user_profesor_id	
 		)			
 		db.add(db_profesor)   	
 		db.commit()
-		db.refresh(db_profesor)			
+		db.refresh(db_profesor)	
+
+		#Disable el profesor 
+		db_user = db.query(models.User).filter(models.User.id == profesor.user_profesor_id).first()
+		db_user.disable = False
+		db.commit()
+		db.refresh(db_user)	
+		
 		return db_profesor
 		
 	except IntegrityError as e:
@@ -452,38 +508,113 @@ async def crear_profesor(current_user: Annotated[schemas.User, Security(get_curr
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Profesor")		
 
-@app.get("/leer_profesores/")  
-async def leer_profesores(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_profesores/", status_code=status.HTTP_201_CREATED)  
+async def leer_profesores(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
-	db_profesores = db.query(models.Profesor).all()	
+	
+	db_profesores = db.query(
+							#Datos Profesor
+							models.Profesor.id_profesor,
+							models.Profesor.prf_genero,
+							models.Profesor.prf_estado_civil,
+							models.Profesor.prf_numero_empleos,
+							models.Profesor.prf_hijos,
+							models.Profesor.prf_pos_tecnica_trabajo,
+							models.Profesor.prf_pos_tecnica_hogar,
+							models.Profesor.prf_cargo,
+							models.Profesor.prf_trab_remoto,
+							models.Profesor.prf_categoria_docente,
+							models.Profesor.prf_categoria_cientifica,
+							models.Profesor.prf_experiencia_practicas,
+							models.Profesor.prf_numero_est_atendidos,
+							models.Profesor.prf_entidad_id.label('profesor_entidad'),
+							#Datos Entidad Origen
+							models.Entidad_Origen.org_siglas,
+							models.Entidad_Origen.id_entidad_origen,
+							#Datos del usiario
+							models.User.ci,
+							models.User.nombre,
+							models.User.primer_appellido,
+							models.User.segundo_appellido,
+							models.User.email,							
+							).select_from(models.Profesor
+							).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+							).join(models.User, models.User.id == models.Profesor.user_profesor_id							
+							).all()		
 	
 	return db_profesores
 	
-@app.delete("/eliminar_profesor/{id}") 
-async def eliminar_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_profesores_no_activos/", status_code=status.HTTP_201_CREATED)  
+async def leer_profesores_no_activos(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+					
+	db_profesores = db.query(
+			models.User.id,
+			models.User.ci,
+			models.User.nombre,
+			models.User.primer_appellido,
+			models.User.segundo_appellido,
+			models.User.email,							
+		).select_from(models.User
+		).where(models.User.role.contains("profesor")
+		).filter_by(disable = True
+		).all()		
+
+	return db_profesores
+	
+@app.delete("/eliminar_profesor/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_profesor(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_profesor = db.query(models.Profesor
 						).filter(models.Profesor.id_profesor == id
 						).first()
 	if db_profesor is None:
-		raise HTTPException(status_code=404, detail="El profesor no existe en la base de datos")	
+		raise HTTPException(status_code=404, detail="El profesor no existe en la base de datos")		
 	db.delete(db_profesor)	
 	db.commit()
+	
+	#Disable el profesor 
+	db_user = db.query(models.User).filter(models.User.id == db_profesor.user_profesor_id).first()
+	db_user.disable = True
+	db.commit()
+	db.refresh(db_user)	
+	
 	return {"Result": "Profesor eliminado satisfactoriamente"}
+	
+@app.put("/actualizar_profesor/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, profesor: schemas.Profesor_UPD, db: Session = Depends(get_db)):
+				
+	db_profesor = db.query(models.Profesor).filter(models.Profesor.id_profesor == id).first()
+	
+	if db_profesor is None:
+		raise HTTPException(status_code=404, detail="El profesor seleccionado no existen en la base de datos")
+		
+	db_profesor.prf_genero = profesor.prf_genero
+	db_profesor.prf_estado_civil = profesor.prf_estado_civil
+	db_profesor.prf_numero_empleos = profesor.prf_numero_empleos
+	db_profesor.prf_hijos = profesor.prf_hijos
+	db_profesor.prf_pos_tecnica_trabajo = profesor.prf_pos_tecnica_trabajo
+	db_profesor.prf_pos_tecnica_hogar = profesor.prf_pos_tecnica_hogar
+	db_profesor.prf_cargo = profesor.prf_cargo
+	db_profesor.prf_trab_remoto = profesor.prf_trab_remoto
+	db_profesor.prf_categoria_docente = profesor.prf_categoria_docente
+	db_profesor.prf_categoria_cientifica = profesor.prf_categoria_cientifica
+	db_profesor.prf_experiencia_practicas = profesor.prf_experiencia_practicas 
+	db_profesor.prf_numero_est_atendidos = profesor.prf_numero_est_atendidos
+	
+	db.commit()
+	db.refresh(db_profesor)	
+	return {"Result": "Datos del profesor actualizados satisfactoriamente"}	
 
 #############################
 #######  ESTUDIANTE  ########
 #############################
 @app.post("/crear_estudiante/", status_code=status.HTTP_201_CREATED)
-async def crear_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_estudiante(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					estudiante: schemas.Estudiante, db: Session = Depends(get_db)):
 	try:
 		db_estudiante = models.Estudiante(
-			est_ci = estudiante.est_ci,
-			est_nombre = estudiante.est_nombre,
-			est_primer_appellido = estudiante.est_primer_appellido,
-			est_segundo_appellido = estudiante.est_segundo_appellido,  
-			est_correo = estudiante.est_correo, 
 			est_genero = estudiante.est_genero,
 			est_estado_civil = estudiante.est_estado_civil,  #Soltero, Casado, Divorciado, Viudo
 			est_trabajo = estudiante.est_trabajo, 
@@ -493,11 +624,19 @@ async def crear_estudiante(current_user: Annotated[schemas.User, Security(get_cu
 			est_pos_tecnica_escuela = estudiante.est_pos_tecnica_escuela,
 			est_pos_tecnica_hogar = estudiante.est_pos_tecnica_hogar,
 			est_trab_remoto = estudiante.est_trab_remoto,
-			est_entidad_id = estudiante.est_entidad_id,				
+			est_entidad_id = estudiante.est_entidad_id,	
+			user_estudiante_id = estudiante.user_estudiante_id
 		)			
 		db.add(db_estudiante)   	
 		db.commit()
-		db.refresh(db_estudiante)			
+		db.refresh(db_estudiante)
+
+		#Disable el estudiante 
+		db_user = db.query(models.User).filter(models.User.id == estudiante.user_estudiante_id).first()
+		db_user.disable = False
+		db.commit()
+		db.refresh(db_user)	
+		
 		return db_estudiante
 		
 	except IntegrityError as e:
@@ -505,15 +644,67 @@ async def crear_estudiante(current_user: Annotated[schemas.User, Security(get_cu
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Estudiante")		
 
-@app.get("/leer_estudiante/")  
-async def leer_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_estudiante_simple/", status_code=status.HTTP_201_CREATED)  
+async def leer_estudiante_simple(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
-	db_estudiantes = db.query(models.Estudiante).all()	
+
+		db_estudiantes = db.query(models.Estudiante).all()
+		
+		return db_estudiantes
+		
+@app.get("/leer_estudiantes/", status_code=status.HTTP_201_CREATED)  
+async def leer_estudiantes(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
+	db_estudiantes = db.query(
+							#Datos Estudiante
+							models.Estudiante.id_estudiante,
+							models.Estudiante.est_genero,
+							models.Estudiante.est_estado_civil,
+							models.Estudiante.est_trabajo,
+							models.Estudiante.est_becado,
+							models.Estudiante.est_hijos,
+							models.Estudiante.est_posibilidad_economica,
+							models.Estudiante.est_pos_tecnica_escuela,
+							models.Estudiante.est_pos_tecnica_hogar,
+							models.Estudiante.est_trab_remoto,
+							models.Estudiante.est_entidad_id.label('estudiante_entidad'),
+							#Datos Entidad Origen
+							models.Entidad_Origen.org_siglas,
+							models.Entidad_Origen.id_entidad_origen,
+							#Datos del usiario
+							models.User.ci,
+							models.User.nombre,
+							models.User.primer_appellido,
+							models.User.segundo_appellido,
+							models.User.email,				
+							).select_from(models.Estudiante
+							).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id
+							).join(models.User, models.User.id == models.Estudiante.user_estudiante_id	
+							).all()		
 	
 	return db_estudiantes
 	
-@app.delete("/eliminar_estudiante/{id}") 
-async def eliminar_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_estudiantes_no_activos/", status_code=status.HTTP_201_CREATED)  
+async def leer_estudiantes_no_activos(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+					
+	db_estudiantes = db.query(
+			models.User.id,
+			models.User.ci,
+			models.User.nombre,
+			models.User.primer_appellido,
+			models.User.segundo_appellido,
+			models.User.email,							
+		).select_from(models.User
+		).where(models.User.role.contains("estudiante")
+		).filter_by(disable = True
+		).all()		
+
+	return db_estudiantes
+	
+@app.delete("/eliminar_estudiante/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_estudiante(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_estudiante = db.query(models.Estudiante
 						).filter(models.Estudiante.id_estudiante == id
@@ -522,21 +713,46 @@ async def eliminar_estudiante(current_user: Annotated[schemas.User, Security(get
 		raise HTTPException(status_code=404, detail="El estudiante no existe en la base de datos")	
 	db.delete(db_estudiante)	
 	db.commit()
+	
+	#Disable el estudiante
+	db_user = db.query(models.User).filter(models.User.id == db_estudiante.user_estudiante_id).first()
+	db_user.disable = True
+	db.commit()
+	db.refresh(db_user)	
+	
 	return {"Result": "Estudiante eliminado satisfactoriamente"}
+	
+@app.put("/actualizar_estudiante/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])], 
+				id: str, estudiante: schemas.Estudiante_UPD, db: Session = Depends(get_db)):
+	
+	db_estudiante = db.query(models.Estudiante).filter(models.Estudiante.id_estudiante == id).first()
+	
+	if db_estudiante is None:
+		raise HTTPException(status_code=404, detail="El profesor seleccionado no existen en la base de datos")
+		
+	db_estudiante.est_genero = estudiante.est_genero
+	db_estudiante.est_estado_civil = estudiante.est_estado_civil
+	db_estudiante.est_trabajo = estudiante.est_trabajo
+	db_estudiante.est_becado = estudiante.est_becado
+	db_estudiante.est_hijos = estudiante.est_hijos
+	db_estudiante.est_posibilidad_economica = estudiante.est_posibilidad_economica
+	db_estudiante.est_pos_tecnica_escuela = estudiante.est_pos_tecnica_escuela
+	db_estudiante.est_pos_tecnica_hogar = estudiante.est_pos_tecnica_hogar
+	db_estudiante.est_trab_remoto = estudiante.est_trab_remoto	
+	
+	db.commit()
+	db.refresh(db_estudiante)	
+	return {"Result": "Datos del estudiante actualizados satisfactoriamente"}	
 
 #############################
 #######   CLIENTE  ##########
 #############################
 @app.post("/crear_cliente/", status_code=status.HTTP_201_CREATED)
-async def crear_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_cliente(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					cliente: schemas.Cliente, db: Session = Depends(get_db)):
 	try:
 		db_cliente = models.Cliente(
-			cli_ci = cliente.cli_ci,
-			cli_nombre = cliente.cli_nombre,
-			cli_primer_appellido = cliente.cli_primer_appellido,			
-			cli_segundo_appellido = cliente.cli_segundo_appellido, 
-			cli_correo = cliente.cli_correo,
 			cli_genero = cliente.cli_genero,
 			cli_estado_civil = cliente.cli_estado_civil,  #Soltero, Casado, Divorciado, Viudo
 			cli_numero_empleos = cliente.cli_numero_empleos,
@@ -549,11 +765,19 @@ async def crear_cliente(current_user: Annotated[schemas.User, Security(get_curre
 			cli_categoria_cientifica = cliente.cli_categoria_cientifica, #Ingeniero, Licenciado, Master, Doctor, Tecnico
 			cli_experiencia_practicas = cliente.cli_experiencia_practicas,  
 			cli_numero_est_atendidos = cliente.cli_numero_est_atendidos,  #Numero de estudiantes atendidos en el pasado
-			cli_entidad_id = cliente.cli_entidad_id 		
+			cli_entidad_id = cliente.cli_entidad_id,
+			user_cliente_id = cliente.user_cliente_id			
 		)			
 		db.add(db_cliente)   	
 		db.commit()
-		db.refresh(db_cliente)			
+		db.refresh(db_cliente)
+
+		#Disable el cliente 
+		db_user = db.query(models.User).filter(models.User.id == cliente.user_cliente_id).first()
+		db_user.disable = False
+		db.commit()
+		db.refresh(db_user)	
+		
 		return db_cliente
 		
 	except IntegrityError as e:
@@ -561,15 +785,71 @@ async def crear_cliente(current_user: Annotated[schemas.User, Security(get_curre
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Cliente")		
 
-@app.get("/leer_cliente/")  
-async def leer_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_cliente_simple/", status_code=status.HTTP_201_CREATED)  
+async def leer_cliente_simple(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
-	db_cliente = db.query(models.Cliente).all()	
+
+		db_cliente = db.query(models.Cliente).all()
+		
+		return db_cliente
+		
+@app.get("/leer_clientes/", status_code=status.HTTP_201_CREATED)  
+async def leer_clientes(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	db_cliente = db.query(models.Cliente).all()
+
+	db_cliente = db.query(
+					#Datos Cliente
+					models.Cliente.id_cliente,
+					models.Cliente.cli_genero,
+					models.Cliente.cli_estado_civil,
+					models.Cliente.cli_numero_empleos,
+					models.Cliente.cli_hijos,
+					models.Cliente.cli_pos_tecnica_trabajo,
+					models.Cliente.cli_pos_tecnica_hogar,
+					models.Cliente.cli_cargo,
+					models.Cliente.cli_trab_remoto,
+					models.Cliente.cli_categoria_docente,
+					models.Cliente.cli_categoria_cientifica,
+					models.Cliente.cli_experiencia_practicas,
+					models.Cliente.cli_numero_est_atendidos,
+					models.Cliente.cli_entidad_id.label('cliente_entidad'),
+					#Datos Entidad Destino
+					models.Entidad_Destino.dest_siglas,
+					models.Entidad_Destino.id_entidad_destino,
+					#Datos del usiario
+					models.User.ci,
+					models.User.nombre,
+					models.User.primer_appellido,
+					models.User.segundo_appellido,
+					models.User.email,		
+					).select_from(models.Cliente
+					).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id
+					).join(models.User, models.User.id == models.Cliente.user_cliente_id	
+					).all()			
 	
 	return db_cliente
 	
-@app.delete("/eliminar_cliente/{id}") 
-async def eliminar_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_clientes_no_activos/", status_code=status.HTTP_201_CREATED)  
+async def leer_clientes_no_activos(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+					
+	db_clientes = db.query(
+			models.User.id,
+			models.User.ci,
+			models.User.nombre,
+			models.User.primer_appellido,
+			models.User.segundo_appellido,
+			models.User.email,							
+		).select_from(models.User
+		).where(models.User.role.contains("cliente")
+		).filter_by(disable = True
+		).all()		
+
+	return db_clientes
+	
+@app.delete("/eliminar_cliente/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_cliente(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_cliente = db.query(models.Cliente
 						).filter(models.Cliente.id_cliente == id
@@ -578,13 +858,46 @@ async def eliminar_cliente(current_user: Annotated[schemas.User, Security(get_cu
 		raise HTTPException(status_code=404, detail="El cliente no existe en la base de datos")	
 	db.delete(db_cliente)	
 	db.commit()
+	
+	#Disable el cliente
+	db_user = db.query(models.User).filter(models.User.id == db_cliente.user_cliente_id).first()
+	db_user.disable = True
+	db.commit()
+	db.refresh(db_user)	
+	
 	return {"Result": "Cliente eliminado satisfactoriamente"}
+	
+@app.put("/actualizar_cliente/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, cliente: schemas.Cliente_UPD, db: Session = Depends(get_db)):
+	
+	db_cliente = db.query(models.Cliente).filter(models.Cliente.id_cliente == id).first()
+	
+	if db_cliente is None:
+		raise HTTPException(status_code=404, detail="El cliente seleccionado no existen en la base de datos")
+		
+	db_cliente.cli_genero = cliente.cli_genero
+	db_cliente.cli_estado_civil = cliente.cli_estado_civil
+	db_cliente.cli_numero_empleos = cliente.cli_numero_empleos
+	db_cliente.cli_hijos = cliente.cli_hijos
+	db_cliente.cli_pos_tecnica_trabajo = cliente.cli_pos_tecnica_trabajo
+	db_cliente.cli_pos_tecnica_hogar = cliente.cli_pos_tecnica_hogar
+	db_cliente.cli_cargo = cliente.cli_cargo
+	db_cliente.cli_trab_remoto = cliente.cli_trab_remoto
+	db_cliente.cli_categoria_docente = cliente.cli_categoria_docente
+	db_cliente.cli_categoria_cientifica = cliente.cli_categoria_cientifica
+	db_cliente.cli_experiencia_practicas = cliente.cli_experiencia_practicas 
+	db_cliente.cli_numero_est_atendidos = cliente.cli_numero_est_atendidos
+	
+	db.commit()
+	db.refresh(db_cliente)	
+	return {"Result": "Datos del cliente actualizados satisfactoriamente"}	
 	
 #############################
 ###  CONCERTACION TEMA ######
 #############################
 @app.post("/crear_concertacion_tema/", status_code=status.HTTP_201_CREATED)
-async def crear_concertacion_tema(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_concertacion_tema(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					concertacion: schemas.Concertacion_Tema, db: Session = Depends(get_db)):
 	try:
 		db_concertacion = models.Concertacion_Tema(
@@ -596,6 +909,7 @@ async def crear_concertacion_tema(current_user: Annotated[schemas.User, Security
 			conc_actores_externos = concertacion.conc_actores_externos,
 			conc_profesor_id = concertacion.conc_profesor_id,
 			conc_cliente_id = concertacion.conc_cliente_id,
+			conc_evaluacion = "Mejorable",
 		)			
 		db.add(db_concertacion)   	
 		db.commit()
@@ -607,15 +921,90 @@ async def crear_concertacion_tema(current_user: Annotated[schemas.User, Security
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Cliente")		
 
-@app.get("/leer_concertaciones/")  
-async def leer_concertaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_concertacion_simple/", status_code=status.HTTP_201_CREATED)  
+async def leer_concertacion_simple(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
-	db_concertacion = db.query(models.Concertacion_Tema).all()	
+
+		db_conc = db.query(models.Concertacion_Tema).all()
+		
+		return db_conc
+		
+@app.get("/leer_concertaciones/", status_code=status.HTTP_201_CREATED)  
+async def leer_concertaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las concertaciones				
+	db_concertacion = db.query(
+			#Datos de Concertacion
+			models.Concertacion_Tema.id_conc_tema,
+			models.Concertacion_Tema.conc_tema,
+			models.Concertacion_Tema.conc_descripcion,
+			models.Concertacion_Tema.conc_complejidad,
+			models.Concertacion_Tema.conc_valoracion_prof,
+			models.Concertacion_Tema.conc_profesor_id,
+			models.Concertacion_Tema.conc_actores_externos,
+			models.Concertacion_Tema.conc_evaluacion,
+			models.Concertacion_Tema.conc_valoracion_cliente,							
+			models.Concertacion_Tema.conc_cliente_id,
+			#Datos de profesor
+			models.Profesor.id_profesor,			
+			prf_query.c.prf_ci,
+			prf_query.c.prf_nombre,
+			prf_query.c.prf_primer_appellido,
+			prf_query.c.prf_segundo_appellido,
+			prf_query.c.prf_email,		
+			models.Profesor.prf_entidad_id,
+			#Datos de cliente
+			models.Cliente.id_cliente,
+			cli_query.c.cli_ci,
+			cli_query.c.cli_nombre,
+			cli_query.c.cli_primer_appellido,
+			cli_query.c.cli_segundo_appellido,
+			cli_query.c.cli_email,		
+			models.Cliente.cli_entidad_id,
+			#Datos Entidad Origen
+			models.Entidad_Origen.org_siglas,
+			models.Entidad_Origen.id_entidad_origen,
+			#Datos Entidad Destino
+			models.Entidad_Destino.dest_siglas,
+			models.Entidad_Destino.id_entidad_destino,
+			).select_from(models.Concertacion_Tema
+			).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
+			).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+			).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id
+			).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+			).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+			).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id								
+			).all()		
 	
 	return db_concertacion
 	
-@app.delete("/eliminar_concertacion/{id}") 
-async def eliminar_concertacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_concertacion = db.query(models.Concertacion_Tema
 						).filter(models.Concertacion_Tema.id_conc_tema == id
@@ -626,22 +1015,60 @@ async def eliminar_concertacion(current_user: Annotated[schemas.User, Security(g
 	db.commit()
 	return {"Result": "Concertacion eliminada satisfactoriamente"}
 	
-@app.put("/evaluar_concertacion/{id}") 
-async def evaluar_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)], 
+@app.put("/evaluar_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
+async def evaluar_concertacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
 				id: str, conc_eva: schemas.Concertacion_Tema_Eval, db: Session = Depends(get_db)):
+	
 	db_concertacion = db.query(models.Concertacion_Tema).filter(models.Concertacion_Tema.id_conc_tema == id).first()
+	
 	if db_concertacion is None:
 		raise HTTPException(status_code=404, detail="Concertacion no existe ne base de datos")
+		
 	db_concertacion.conc_evaluacion = conc_eva.conc_evaluacion 	
+	
 	db.commit()
 	db.refresh(db_concertacion)	
 	return db_concertacion
+	
+@app.put("/actualizar_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_concertacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, concertacion: schemas.Concertacion_Tema_UPD, db: Session = Depends(get_db)):
+	
+	db_conc = db.query(models.Concertacion_Tema).filter(models.Concertacion_Tema.id_conc_tema == id).first()
+	
+	if db_conc is None:
+		raise HTTPException(status_code=404, detail="La concertacion de tema seleccionada no existen en la base de datos")
+		
+	db_conc.conc_tema = concertacion.conc_tema
+	db_conc.conc_descripcion = concertacion.conc_descripcion
+	db_conc.conc_valoracion_prof = concertacion.conc_valoracion_prof
+	db_conc.conc_valoracion_cliente = concertacion.conc_valoracion_prof
+	db_conc.conc_complejidad = concertacion.conc_complejidad
+	db_conc.conc_actores_externos = concertacion.conc_actores_externos
+	
+	db.commit()
+	db.refresh(db_conc)	
+	return {"Result": "Datos de la concertacion de tema actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_responsables_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_responsables_concertacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
+				id: str, concertacion: schemas.Concertacion_Tema_UPD_Actores, db: Session = Depends(get_db)):
+	
+	db_conc = db.query(models.Concertacion_Tema).filter(models.Concertacion_Tema.id_conc_tema == id).first()
+	if db_conc is None:
+		raise HTTPException(status_code=404, detail="La concertacion de tema seleccionada no existen en la base de datos")
+		
+	db_conc.conc_profesor_id = concertacion.conc_profesor_id
+	db_conc.conc_cliente_id = concertacion.conc_cliente_id	
+	db.commit()
+	db.refresh(db_conc)	
+	return {"Result": "Datos de responsables de la concertacion de tema actualizados satisfactoriamente"}	
 	
 #############################
 ####### TIPO TAREA  #########
 #############################
 @app.post("/crear_tipo_tarea/", status_code=status.HTTP_201_CREATED)
-async def crear_tipo_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_tipo_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					tarea: schemas.Tipo_Tarea, db: Session = Depends(get_db)):
 	try:
 		db_tipo_tarea = models.Tipo_Tarea(
@@ -657,30 +1084,49 @@ async def crear_tipo_tarea(current_user: Annotated[schemas.User, Security(get_cu
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Tipo Tarea")		
 
-@app.get("/leer_tipos_tareas/")  
-async def leer_tipos_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_tipos_tareas/", status_code=status.HTTP_201_CREATED)  
+async def leer_tipos_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
 	db_tipos_tareas = db.query(models.Tipo_Tarea).all()	
 	
 	return db_tipos_tareas
 	
-@app.delete("/eliminar_tipo_tarea/{id}") 
-async def eliminar_tipo_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_tipo_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_tipo_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
+	
 	db_tipo_tarea = db.query(models.Tipo_Tarea
 						).filter(models.Tipo_Tarea.id_tipo_tarea == id
 						).first()
+	
 	if db_tipo_tarea is None:
 		raise HTTPException(status_code=404, detail="El tipo de tarea no existe en la base de datos")	
+	
 	db.delete(db_tipo_tarea)	
 	db.commit()
 	return {"Result": "Tarea eliminada satisfactoriamente"}
+	
+@app.put("/actualizar_tipo_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_tipo_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, tarea: schemas.Tipo_Tarea, db: Session = Depends(get_db)):
+	
+	db_tipo_tarea = db.query(models.Tipo_Tarea).filter(models.Tipo_Tarea.id_tipo_tarea == id).first()
+	
+	if db_tipo_tarea is None:
+		raise HTTPException(status_code=404, detail="El tipo de tarea seleccionado no existen en la base de datos")
+		
+	db_tipo_tarea.tarea_tipo_nombre = tarea.tarea_tipo_nombre	
+	
+	db.commit()
+	db.refresh(db_tipo_tarea)	
+	return {"Result": "Datos del tipo de tarea actualizados satisfactoriamente"}	
 	
 #############################
 ###  ASIGNACION TAREA  ######
 #############################
 @app.post("/crear_asignacion_tarea/", status_code=status.HTTP_201_CREATED)
-async def crear_asignacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_asignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					asg_tarea: schemas.Asignacion_Tarea, db: Session = Depends(get_db)):
 	try:
 		db_asg_tarea = models.Asignacion_Tarea(
@@ -689,11 +1135,11 @@ async def crear_asignacion_tarea(current_user: Annotated[schemas.User, Security(
 			asg_fecha_fin = asg_tarea.asg_fecha_fin, 
 			asg_complejidad_estimada = asg_tarea.asg_complejidad_estimada, 
 			asg_participantes = asg_tarea.asg_participantes,  #Numero de miembros en el equipo
-			#asg_evaluacion = asg_tarea.asg_evaluacion,  # con average de actividades
 			#asg_asignada = asg_tarea.asg_asignada, 
 			asg_tipo_tarea_id = asg_tarea.asg_tipo_tarea_id,
 			asg_estudiante_id = asg_tarea.asg_estudiante_id,    
-			asg_conc_id = asg_tarea.asg_conc_id
+			asg_conc_id = asg_tarea.asg_conc_id,
+			asg_evaluacion = "NoEvaluada"
 		)			
 		db.add(db_asg_tarea)   	
 		db.commit()
@@ -705,15 +1151,114 @@ async def crear_asignacion_tarea(current_user: Annotated[schemas.User, Security(
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Asignacion_Tareas")		
 
-@app.get("/leer_asgignaciones_tareas/")  
-async def leer_asgignaciones_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_asig_tarea_simple/", status_code=status.HTTP_201_CREATED)  
+async def leer_asig_tarea_simple(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
-	db_asgnaciones_tareas = db.query(models.Asignacion_Tarea).all()	
+
+		db_asg = db.query(models.Asignacion_Tarea).all()
+		
+		return db_asg
+		
+@app.get("/leer_asgignaciones_tareas/", status_code=status.HTTP_201_CREATED)  
+async def leer_asgignaciones_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.ci.label('est_ci'),
+		models.User.nombre.label('est_nombre'),
+		models.User.primer_appellido.label('est_primer_appellido'),
+		models.User.segundo_appellido.label('est_segundo_appellido'),
+		models.User.email.label('est_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las asignaciones
+	db_asgnaciones_tareas = db.query(
+		#Datos de Asignacion
+		models.Asignacion_Tarea.id_asignacion,
+		models.Asignacion_Tarea.asg_descripcion,
+		models.Asignacion_Tarea.asg_fecha_inicio,
+		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,
+		models.Asignacion_Tarea.asg_evaluacion,
+		models.Asignacion_Tarea.asg_tipo_tarea_id,
+		models.Asignacion_Tarea.asg_estudiante_id,
+		models.Asignacion_Tarea.asg_conc_id,
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.id_tipo_tarea,
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_profesor_id,						
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de Estudiante
+		models.Estudiante.id_estudiante,
+		models.Estudiante.est_entidad_id,
+		est_query.c.est_ci,
+		est_query.c.est_nombre,
+		est_query.c.est_primer_appellido,
+		est_query.c.est_segundo_appellido,
+		est_query.c.est_email,		
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id	
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id	
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id	
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).all()	
 	
 	return db_asgnaciones_tareas
 	
-@app.delete("/eliminar_asgignacion_tarea/{id}") 
-async def eliminar_asgignacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_asgignacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_asgignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_asg_tarea = db.query(models.Asignacion_Tarea
 						).filter(models.Asignacion_Tarea.id_asignacion == id
@@ -724,8 +1269,8 @@ async def eliminar_asgignacion_tarea(current_user: Annotated[schemas.User, Secur
 	db.commit()
 	return {"Result": "Asignacion de Tarea eliminada satisfactoriamente"}
 
-@app.put("/evaluar_asignacion_tarea/{id}") 
-async def evaluar_asignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)], 
+@app.put("/evaluar_asignacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def evaluar_asignacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
 				id: str, asg_tarea_eva: schemas.Asignacion_Tarea_Eval, db: Session = Depends(get_db)):
 	db_asg_tarea = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
 	if db_asg_tarea is None:
@@ -735,19 +1280,68 @@ async def evaluar_asignacion_tarea(current_user: Annotated[schemas.User, Depends
 	db.refresh(db_asg_tarea)	
 	return db_asg_tarea
 	
+@app.put("/actualizar_asignacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_asignacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, asg_tarea: schemas.Asignacion_Tarea_UPD, db: Session = Depends(get_db)):
+	
+	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
+	
+	if db_asg is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
+		
+	db_asg.asg_descripcion = asg_tarea.asg_descripcion
+	db_asg.asg_fecha_inicio = asg_tarea.asg_fecha_inicio
+	db_asg.asg_fecha_fin = asg_tarea.asg_fecha_fin
+	db_asg.asg_complejidad_estimada = asg_tarea.asg_complejidad_estimada
+	db_asg.asg_participantes = asg_tarea.asg_participantes
+	
+	db.commit()
+	db.refresh(db_asg)	
+	return {"Result": "Datos de la asignacion actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_asignacion_tarea_gestor/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_asignacion_tarea_gestor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
+				id: str, asg_tarea: schemas.Asignacion_Tarea_PUD_Gestor, db: Session = Depends(get_db)):
+	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
+	
+	if db_asg is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
+		
+	db_asg.asg_estudiante_id = asg_tarea.asg_estudiante_id
+	db_asg.asg_conc_id = asg_tarea.asg_conc_id
+	
+	db.commit()
+	db.refresh(db_asg)	
+	return {"Result": "Datos sobre encargados de la gestion de la asignacion actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_asignacion_tarea_tipo/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_asignacion_tarea_tipo(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, asg_tarea: schemas.Asignacion_Tarea_UPD_Tipo, db: Session = Depends(get_db)):
+	
+	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
+	
+	if db_asg is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
+		
+	db_asg.asg_tipo_tarea_id = asg_tarea.asg_tipo_tarea_id
+	
+	db.commit()
+	db.refresh(db_asg)	
+	return {"Result": "Datos para el tipo de tarea de la asignacion actualizados satisfactoriamente"}	
+	
 #############################
 ###  ACTIVIDADES TAREA  #####
 #############################
 @app.post("/crear_actividad_tarea/", status_code=status.HTTP_201_CREATED)
-async def crear_actividad_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_actividad_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					act_tarea: schemas.Actividades_Tarea, db: Session = Depends(get_db)):
 	try:
 		db_act_tarea = models.Actividades_Tarea(
 			act_nombre = act_tarea.act_nombre,
-			#act_resultado = act_tarea.act_resultado, 
 			act_est_memo = act_tarea.act_est_memo,
 			act_prof_memo = act_tarea.act_prof_memo,
 			act_cli_memo = act_tarea.act_cli_memo,
+			act_resultado = "Iniciada",
 			id_asg_act = act_tarea.id_asg_act		
 		)			
 		db.add(db_act_tarea)   	
@@ -760,15 +1354,15 @@ async def crear_actividad_tarea(current_user: Annotated[schemas.User, Security(g
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Actividades_Tarea")		
 
-@app.get("/leer_actividades_tareas/")  
-async def leer_actividades_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_actividades_tareas/", status_code=status.HTTP_201_CREATED)  
+async def leer_actividades_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
 	db_actividades_tareas = db.query(models.Actividades_Tarea).all()	
 	
 	return db_actividades_tareas
 	
-@app.delete("/eliminar_actividad_tarea/{id}") 
-async def eliminar_actividad_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_actividad_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_actividad_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					id: str, db: Session = Depends(get_db)):
 	db_act_tarea = db.query(models.Actividades_Tarea
 						).filter(models.Actividades_Tarea.id_actividad_tarea == id
@@ -779,28 +1373,81 @@ async def eliminar_actividad_tarea(current_user: Annotated[schemas.User, Securit
 	db.commit()
 	return {"Result": "Actividad de Tarea eliminada satisfactoriamente"}
 	
-@app.put("/evaluar_actividad_tarea/{id}") 
-async def evaluar_actividad_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)], 
-				id: str, act_tarea_eva: schemas.Actividades_Tarea_Eval, db: Session = Depends(get_db)):
+@app.put("/evaluar_actividad_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def evaluar_actividad_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
+				id: str, act_tarea_res: schemas.Actividades_Tarea_Eval, db: Session = Depends(get_db)):
 	db_act_tarea = db.query(models.Actividades_Tarea).filter(models.Actividades_Tarea.id_actividad_tarea == id).first()
 	if db_act_tarea is None:
 		raise HTTPException(status_code=404, detail="Actividad Tarea no existe ne la base de datos")
-	db_act_tarea.act_resultado = act_tarea_eva.act_resultado 	
+	db_act_tarea.act_resultado = act_tarea_res.act_resultado 	
 	db.commit()
 	db.refresh(db_act_tarea)	
 	return db_act_tarea
 	
-#############################
-###  ACTUALIZACION TAREA  ###
-#############################
+@app.put("/actualizar_actividad_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_actividad_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
+				id: str, act_tarea: schemas.Actividades_Tarea, db: Session = Depends(get_db)):
+	db_act = db.query(models.Actividades_Tarea).filter(models.Actividades_Tarea.id_actividad_tarea == id).first()
+	if db_act is None:
+		raise HTTPException(status_code=404, detail="La actividad seleccionada no existen en la base de datos")
+		
+	db_act.act_nombre = act_tarea.act_nombre	
+	
+	db.commit()
+	db.refresh(db_act)	
+	return {"Result": "Datos del nombre de la actividad actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_actividad_tarea_estudiante/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_actividad_tarea_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
+				id: str, act_tarea: schemas.Actividades_Tarea_UPD_Est, db: Session = Depends(get_db)):
+	db_act = db.query(models.Actividades_Tarea).filter(models.Actividades_Tarea.id_actividad_tarea == id).first()
+	if db_act is None:
+		raise HTTPException(status_code=404, detail="La actividad seleccionada no existen en la base de datos")
+		
+	db_act.act_est_memo = act_tarea.act_est_memo	
+	
+	db.commit()
+	db.refresh(db_act)	
+	return {"Result": "Datos de la opinion del estudiante de la actividad actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_actividad_tarea_profesor/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_actividad_tarea_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
+				id: str, act_tarea: schemas.Actividades_Tarea_UPD_Prf, db: Session = Depends(get_db)):
+	db_act = db.query(models.Actividades_Tarea).filter(models.Actividades_Tarea.id_actividad_tarea == id).first()
+	if db_act is None:
+		raise HTTPException(status_code=404, detail="La actividad seleccionada no existen en la base de datos")
+		
+	db_act.act_prof_memo = act_tarea.act_prof_memo	
+	
+	db.commit()
+	db.refresh(db_act)	
+	return {"Result": "Datos de la opinion del profesor de la actividad actualizados satisfactoriamente"}	
+	
+@app.put("/actualizar_actividad_tarea_cliente/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_actividad_tarea_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
+				id: str, act_tarea: schemas.Actividades_Tarea_UPD_Cli, db: Session = Depends(get_db)):
+	db_act = db.query(models.Actividades_Tarea).filter(models.Actividades_Tarea.id_actividad_tarea == id).first()
+	if db_act is None:
+		raise HTTPException(status_code=404, detail="La actividad seleccionada no existen en la base de datos")
+		
+	db_act.act_cli_memo = act_tarea.act_cli_memo	
+	
+	db.commit()
+	db.refresh(db_act)	
+	return {"Result": "Datos de la opinion del cliente de la actividad actualizados satisfactoriamente"}	
+	
+
+##############################################
+###  ACTUALIZACION de ASIGNACION DE TAREA  ###
+##############################################
 @app.post("/crear_actualizacion_tarea/", status_code=status.HTTP_201_CREATED)
-async def crear_actualizacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def crear_actualizacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])],
 					act_tarea: schemas.Tareas_Actualizacion, db: Session = Depends(get_db)):
 	try:
 		db_act_tarea = models.Tareas_Actualizacion(
-			fecha_actualizacion = act_tarea.fecha_actualizacion,
 			memo_actualizacion = act_tarea.memo_actualizacion, 
 			id_asg_upd = act_tarea.id_asg_upd,
+			fecha_actualizacion = func.now(),			
 		)			
 		db.add(db_act_tarea)   	
 		db.commit()
@@ -812,15 +1459,15 @@ async def crear_actualizacion_tarea(current_user: Annotated[schemas.User, Securi
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Tareas_Actualizacion")	
 
-@app.get("/leer_actualizaciones_tareas/")  
-async def leer_actualizaciones_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.get("/leer_actualizaciones_tareas/", status_code=status.HTTP_201_CREATED)  
+async def leer_actualizaciones_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
 	db_actualizaciones_tareas = db.query(models.Tareas_Actualizacion).all()	
 	
 	return db_actualizaciones_tareas
 	
-@app.delete("/eliminar_actualizacion_tarea/{id}") 
-async def eliminar_actualizacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+@app.delete("/eliminar_actualizacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def eliminar_actualizacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])],
 					id: str, db: Session = Depends(get_db)):
 	db_act_tarea = db.query(models.Tareas_Actualizacion
 						).filter(models.Tareas_Actualizacion.id_tareas_act == id
@@ -829,13 +1476,108 @@ async def eliminar_actualizacion_tarea(current_user: Annotated[schemas.User, Sec
 		raise HTTPException(status_code=404, detail="La actividad no existe en la base de datos")	
 	db.delete(db_act_tarea)	
 	db.commit()
-	return {"Result": "Actividad de Tarea eliminada satisfactoriamente"}
+	return {"Result": "Actualizacion de asignacion de Tarea eliminada satisfactoriamente"}
+	
+@app.put("/actualizar_actualizacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def actualizar_actualizacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente", "estudiante"])], 
+				id: str, actualizacion: schemas.Tareas_Actualizacion_UPD, db: Session = Depends(get_db)):
+	db_actl = db.query(models.Tareas_Actualizacion).filter(models.Tareas_Actualizacion.id_tareas_act == id).first()
+	if db_actl is None:
+		raise HTTPException(status_code=404, detail="La actualizacion de tarea seleccionada no existen en la base de datos")
+		
+	db_actl.fecha_actualizacion = func.now()
+	db_actl.memo_actualizacion = actualizacion.memo_actualizacion
+	
+	db.commit()
+	db.refresh(db_actl)	
+	return {"Result": "Datos de la actualizacion de asignacion de tarea actualizados satisfactoriamente"}	
+	
+#############################
+###  Gestion al PROFESOR  ###
+#############################	
+@app.get("/obtener_profesor/{id}", status_code=status.HTTP_201_CREATED) 
+async def obtener_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["admin", "profesor"])], 
+				id: str, profesor: schemas.Profesor, db: Session = Depends(get_db)):
+				
+	db_profesor = db.query(
+			#Datos Profesor
+			models.Profesor.id_profesor,
+			models.Profesor.prf_genero,
+			models.Profesor.prf_estado_civil,
+			models.Profesor.prf_numero_empleos,
+			models.Profesor.prf_hijos,
+			models.Profesor.prf_pos_tecnica_trabajo,
+			models.Profesor.prf_pos_tecnica_hogar,
+			models.Profesor.prf_cargo,
+			models.Profesor.prf_trab_remoto,
+			models.Profesor.prf_categoria_docente,
+			models.Profesor.prf_categoria_cientifica,
+			models.Profesor.prf_experiencia_practicas,
+			models.Profesor.prf_numero_est_atendidos,
+			models.Profesor.prf_entidad_id.label('profesor_entidad'),
+			#Datos Entidad Origen
+			models.Entidad_Origen.org_siglas,
+			models.Entidad_Origen.id_entidad_origen,
+			#Datos del usiario
+			models.User.ci,
+			models.User.nombre,
+			models.User.primer_appellido,
+			models.User.segundo_appellido,
+			models.User.email,							
+	).select_from(models.Profesor
+	).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+	).join(models.User, models.User.id == models.Profesor.user_profesor_id
+	).where(models.Profesor.user_profesor_id == str
+	).first()		
+
+	return db_profesor
+	
+@app.get("/obtener_profesor_concertaciones/{ci}", status_code=status.HTTP_201_CREATED) 
+async def obtener_profesor_concertaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["admin", "profesor"])], 
+				id: str, profesor: schemas.Profesor, db: Session = Depends(get_db)):
+				
+	db_profesor = db.query(models.Profesor).filter(models.Profesor.prf_ci == ci).first()	
+	if db_profesor is None:
+		raise HTTPException(status_code=404, detail="El profesor seleccionado no existen en la base de datos")
+	
+	db_prof_concertaciones = db.query(
+				#Datos de Concertacion
+				models.Concertacion_Tema.id_conc_tema.label('id_concertacion'),
+				models.Concertacion_Tema.conc_tema,
+				models.Concertacion_Tema.conc_descripcion,
+				models.Concertacion_Tema.conc_complejidad,
+				models.Concertacion_Tema.conc_valoracion_prof,
+				models.Concertacion_Tema.conc_actores_externos,
+				models.Concertacion_Tema.conc_evaluacion,
+				models.Concertacion_Tema.conc_valoracion_cliente,							
+				models.Concertacion_Tema.conc_cliente_id,	
+				#Datos Cliente
+				models.Cliente.id_cliente,								
+				models.Cliente.cli_entidad_id.label('cliente_entidad'),
+				#Datos Entidad Destino
+				models.Entidad_Destino.dest_siglas,
+				models.Entidad_Destino.id_entidad_destino,
+				#Datos del usiario
+				models.User.ci,
+				models.User.nombre,
+				models.User.primer_appellido,
+				models.User.segundo_appellido,
+				models.User.email,				
+			).select_from(models.Concertacion_Tema
+			).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
+			).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.prf_entidad_id
+			).join(models.User, models.User.id == models.Cliente.user_cliente_id
+			).filter_by(conc_profesor_id = db_profesor.id_profesor
+			).all()	
+	
+	return db_prof_concertaciones 
+	
 
 #############################
 ###  CONSULTAS A LA BD    ###
 #############################
 @app.get("/obtener_registros_concertaciones/")  
-async def obtener_registros_concertaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def obtener_registros_concertaciones(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):  
 	
 	#Datos para predecir las concertaciones				
@@ -898,7 +1640,7 @@ async def obtener_registros_concertaciones(current_user: Annotated[schemas.User,
 	return db_concertaciones 
 	
 @app.get("/obtener_registros_asignaciones/")  
-async def obtener_registros_asignaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def obtener_registros_asignaciones(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):  
 	
 	#Datos para predecir las asignaciones
@@ -948,7 +1690,7 @@ async def obtener_registros_asignaciones(current_user: Annotated[schemas.User, S
 	return db_asignaciones 
 
 @app.get("/obtener_registros_actividades/")  
-async def obtener_registros_actividades(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def obtener_registros_actividades(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):  
 	
 	#Datos para predecir las actividades basandose en su opinion	
@@ -967,7 +1709,7 @@ async def obtener_registros_actividades(current_user: Annotated[schemas.User, Se
 	return db_actividades 
 	
 @app.get("/obtener_registros_actividades_asignacion/")  
-async def obtener_registros_actividades_asignacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def obtener_registros_actividades_asignacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):  
 	#Datos para predecir las actividades de tareas			
 	db_actividades_asig = db.query(							
@@ -1037,7 +1779,7 @@ def create_csv(query, columns_names):
 	return StringIO(csvtemp)
 	
 @app.get("/pdf_registros_concertaciones/")  
-async def pdf_registros_concertaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def pdf_registros_concertaciones(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					db: Session = Depends(get_db)):  	
 	#Datos para predecir las concertaciones				
 	db_concertaciones = db.query(
@@ -1108,7 +1850,7 @@ async def pdf_registros_concertaciones(current_user: Annotated[schemas.User, Sec
 	return StreamingResponse(iter([myfile.getvalue()]), media_type="application/csv", headers=headers)		  
 	
 @app.get("/pdf_registros_asignaciones/")  
-async def pdf_registros_asignaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def pdf_registros_asignaciones(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					db: Session = Depends(get_db)):  	
 	#Datos para predecir las asignaciones
 	db_asignaciones = db.query(
@@ -1165,7 +1907,7 @@ async def pdf_registros_asignaciones(current_user: Annotated[schemas.User, Secur
 	return StreamingResponse(iter([myfile.getvalue()]), media_type="application/csv", headers=headers)	
 
 @app.get("/pdf_registros_actividades/")  
-async def pdf_registros_actividades(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def pdf_registros_actividades(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					db: Session = Depends(get_db)):  
 	#Datos para predecir las actividades basandose en su opinion	
 	db_actividades = db.query(							
@@ -1185,7 +1927,7 @@ async def pdf_registros_actividades(current_user: Annotated[schemas.User, Securi
 	return StreamingResponse(iter([myfile.getvalue()]), media_type="application/csv", headers=headers)	
 		
 @app.get("/pdf_registros_actividades_asignacion/")  
-async def pdf_registros_actividades_asignacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["manager"])],
+async def pdf_registros_actividades_asignacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
 					db: Session = Depends(get_db)):  
 	#Datos para predecir las actividades de tareas			
 	db_actividades_asig = db.query(							
