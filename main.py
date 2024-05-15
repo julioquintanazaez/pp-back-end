@@ -493,12 +493,13 @@ async def crear_profesor(current_user: Annotated[schemas.User, Depends(get_curre
 		)			
 		db.add(db_profesor)   	
 		db.commit()
-		db.refresh(db_profesor)	
+		#db.refresh(db_profesor)	
 
 		#Disable el profesor 
 		db_user = db.query(models.User).filter(models.User.id == profesor.user_profesor_id).first()
 		db_user.disable = False
 		db.commit()
+		
 		db.refresh(db_user)	
 		
 		return db_profesor
@@ -702,6 +703,105 @@ async def leer_estudiantes_no_activos(current_user: Annotated[schemas.User, Depe
 		).all()		
 
 	return db_estudiantes
+	
+@app.get("/leer_estudiante_tarea_por_email/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_estudiante_tarea_por_email(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["estudiante"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+					
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.ci.label('est_ci'),
+		models.User.nombre.label('est_nombre'),
+		models.User.primer_appellido.label('est_primer_appellido'),
+		models.User.segundo_appellido.label('est_segundo_appellido'),
+		models.User.email.label('est_email'),	
+	).select_from(models.User
+	).where(models.User.email == email
+	).subquery()	
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las asignaciones
+	db_estuduante_asgnaciones_tarea = db.query(
+		#Datos de Asignacion
+		models.Asignacion_Tarea.id_asignacion,
+		models.Asignacion_Tarea.asg_descripcion,
+		models.Asignacion_Tarea.asg_fecha_inicio,
+		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,
+		models.Asignacion_Tarea.asg_evaluacion,
+		models.Asignacion_Tarea.asg_tipo_tarea_id,
+		models.Asignacion_Tarea.asg_estudiante_id,
+		models.Asignacion_Tarea.asg_conc_id,
+		models.Asignacion_Tarea.asg_activa,
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.id_tipo_tarea,
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_profesor_id,						
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de Estudiante
+		models.Estudiante.id_estudiante,
+		models.Estudiante.est_entidad_id,
+		est_query.c.est_ci,
+		est_query.c.est_nombre,
+		est_query.c.est_primer_appellido,
+		est_query.c.est_segundo_appellido,
+		est_query.c.est_email,		
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id	
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id	
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id	
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).first()		
+
+	return db_estuduante_asgnaciones_tarea
 	
 @app.delete("/eliminar_estudiante/{id}", status_code=status.HTTP_201_CREATED) 
 async def eliminar_estudiante(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
@@ -909,6 +1009,7 @@ async def crear_concertacion_tema(current_user: Annotated[schemas.User, Depends(
 			conc_actores_externos = concertacion.conc_actores_externos,
 			conc_profesor_id = concertacion.conc_profesor_id,
 			conc_cliente_id = concertacion.conc_cliente_id,
+			conc_activa = False,
 			conc_evaluacion = "Mejorable",
 		)			
 		db.add(db_concertacion)   	
@@ -970,6 +1071,7 @@ async def leer_concertaciones(current_user: Annotated[schemas.User, Security(get
 			models.Concertacion_Tema.conc_evaluacion,
 			models.Concertacion_Tema.conc_valoracion_cliente,							
 			models.Concertacion_Tema.conc_cliente_id,
+			models.Concertacion_Tema.conc_activa,
 			#Datos de profesor
 			models.Profesor.id_profesor,			
 			prf_query.c.prf_ci,
@@ -998,10 +1100,162 @@ async def leer_concertaciones(current_user: Annotated[schemas.User, Security(get
 			).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id
 			).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
 			).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
-			).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id								
+			).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id	
 			).all()		
 	
 	return db_concertacion
+	
+@app.get("/leer_concertaciones_profesor/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_concertaciones_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las concertaciones				
+	db_concertaciones_profesor = db.query(
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_descripcion,
+		models.Concertacion_Tema.conc_complejidad,
+		models.Concertacion_Tema.conc_valoracion_prof,
+		models.Concertacion_Tema.conc_profesor_id,
+		models.Concertacion_Tema.conc_actores_externos,
+		models.Concertacion_Tema.conc_evaluacion,
+		models.Concertacion_Tema.conc_valoracion_cliente,							
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		#Datos Entidad Origen
+		models.Entidad_Origen.org_siglas,
+		models.Entidad_Origen.id_entidad_origen,
+		#Datos Entidad Destino
+		models.Entidad_Destino.dest_siglas,
+		models.Entidad_Destino.id_entidad_destino,
+		).select_from(models.Concertacion_Tema
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+		).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id	
+		#).where(models.Concertacion_Tema.conc_activa == True
+		).where(prf_query.c.prf_email == email
+		).all()		
+	
+	return db_concertaciones_profesor
+	
+@app.get("/leer_concertaciones_cliente/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_concertaciones_cliente(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["cliente"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)): 
+
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las concertaciones				
+	db_concertaciones_cliente = db.query(
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_descripcion,
+		models.Concertacion_Tema.conc_complejidad,
+		models.Concertacion_Tema.conc_valoracion_prof,
+		models.Concertacion_Tema.conc_profesor_id,
+		models.Concertacion_Tema.conc_actores_externos,
+		models.Concertacion_Tema.conc_evaluacion,
+		models.Concertacion_Tema.conc_valoracion_cliente,							
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		#Datos Entidad Origen
+		models.Entidad_Origen.org_siglas,
+		models.Entidad_Origen.id_entidad_origen,
+		#Datos Entidad Destino
+		models.Entidad_Destino.dest_siglas,
+		models.Entidad_Destino.id_entidad_destino,
+		).select_from(models.Concertacion_Tema
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+		).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id	
+		#).where(models.Concertacion_Tema.conc_activa == True
+		).where(cli_query.c.cli_email == email
+		).all()		
+	
+	return db_concertaciones_cliente
 	
 @app.delete("/eliminar_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
 async def eliminar_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
@@ -1063,6 +1317,20 @@ async def actualizar_responsables_concertacion(current_user: Annotated[schemas.U
 	db.commit()
 	db.refresh(db_conc)	
 	return {"Result": "Datos de responsables de la concertacion de tema actualizados satisfactoriamente"}	
+	
+@app.put("/activar_concertacion/{id}", status_code=status.HTTP_201_CREATED) 
+async def activar_concertacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
+				id: str, concertacion: schemas.Concertacion_Tema_Activate, db: Session = Depends(get_db)):
+	
+	db_conc = db.query(models.Concertacion_Tema).filter(models.Concertacion_Tema.id_conc_tema == id).first()
+	if db_conc is None:
+		raise HTTPException(status_code=404, detail="La concertacion de tema seleccionada no existen en la base de datos")	
+	
+	db_conc.conc_activa = concertacion.conc_activa
+	
+	db.commit()
+	db.refresh(db_conc)	
+	return {"Result": "Cambio de concertacion desarrollada satisfactoriamente"}	
 	
 #############################
 ####### TIPO TAREA  #########
@@ -1135,11 +1403,10 @@ async def crear_asignacion_tarea(current_user: Annotated[schemas.User, Depends(g
 			asg_fecha_fin = asg_tarea.asg_fecha_fin, 
 			asg_complejidad_estimada = asg_tarea.asg_complejidad_estimada, 
 			asg_participantes = asg_tarea.asg_participantes,  #Numero de miembros en el equipo
-			#asg_asignada = asg_tarea.asg_asignada, 
 			asg_tipo_tarea_id = asg_tarea.asg_tipo_tarea_id,
 			asg_estudiante_id = asg_tarea.asg_estudiante_id,    
 			asg_conc_id = asg_tarea.asg_conc_id,
-			asg_evaluacion = "NoEvaluada"
+			asg_evaluacion = "Mejorable"
 		)			
 		db.add(db_asg_tarea)   	
 		db.commit()
@@ -1158,6 +1425,7 @@ async def leer_asig_tarea_simple(current_user: Annotated[schemas.User, Security(
 		db_asg = db.query(models.Asignacion_Tarea).all()
 		
 		return db_asg
+		
 		
 @app.get("/leer_asgignaciones_tareas/", status_code=status.HTTP_201_CREATED)  
 async def leer_asgignaciones_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
@@ -1211,6 +1479,7 @@ async def leer_asgignaciones_tareas(current_user: Annotated[schemas.User, Securi
 		models.Asignacion_Tarea.asg_tipo_tarea_id,
 		models.Asignacion_Tarea.asg_estudiante_id,
 		models.Asignacion_Tarea.asg_conc_id,
+		models.Asignacion_Tarea.asg_activa,
 		#Datos Tipo de tarea
 		models.Tipo_Tarea.id_tipo_tarea,
 		models.Tipo_Tarea.tarea_tipo_nombre,
@@ -1256,6 +1525,306 @@ async def leer_asgignaciones_tareas(current_user: Annotated[schemas.User, Securi
 		).all()	
 	
 	return db_asgnaciones_tareas
+
+@app.get("/leer_asgignacion_estudiante/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_asgignacion_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["estudiante"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.ci.label('est_ci'),
+		models.User.nombre.label('est_nombre'),
+		models.User.primer_appellido.label('est_primer_appellido'),
+		models.User.segundo_appellido.label('est_segundo_appellido'),
+		models.User.email.label('est_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las asignaciones
+	db_asgnacion = db.query(
+		#Datos de Asignacion
+		models.Asignacion_Tarea.id_asignacion,
+		models.Asignacion_Tarea.asg_descripcion,
+		models.Asignacion_Tarea.asg_fecha_inicio,
+		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,
+		models.Asignacion_Tarea.asg_evaluacion,
+		models.Asignacion_Tarea.asg_tipo_tarea_id,
+		models.Asignacion_Tarea.asg_estudiante_id,
+		models.Asignacion_Tarea.asg_conc_id,
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.id_tipo_tarea,
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_profesor_id,						
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de Estudiante
+		models.Estudiante.id_estudiante,
+		models.Estudiante.est_entidad_id,
+		est_query.c.est_ci,
+		est_query.c.est_nombre,
+		est_query.c.est_primer_appellido,
+		est_query.c.est_segundo_appellido,
+		est_query.c.est_email,		
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id	
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id	
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id	
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).where(models.Asignacion_Tarea.asg_activa == True
+		).where(est_query.c.est_email == email
+		).first()	
+	
+	return db_asgnacion
+	
+@app.get("/leer_profesor_asgignaciones/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_profesor_asgignaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.ci.label('est_ci'),
+		models.User.nombre.label('est_nombre'),
+		models.User.primer_appellido.label('est_primer_appellido'),
+		models.User.segundo_appellido.label('est_segundo_appellido'),
+		models.User.email.label('est_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las asignaciones
+	db_profesor_asgnaciones = db.query(
+		#Datos de Asignacion
+		models.Asignacion_Tarea.id_asignacion,
+		models.Asignacion_Tarea.asg_descripcion,
+		models.Asignacion_Tarea.asg_fecha_inicio,
+		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,
+		models.Asignacion_Tarea.asg_evaluacion,
+		models.Asignacion_Tarea.asg_tipo_tarea_id,
+		models.Asignacion_Tarea.asg_estudiante_id,
+		models.Asignacion_Tarea.asg_conc_id,
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.id_tipo_tarea,
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_profesor_id,						
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de Estudiante
+		models.Estudiante.id_estudiante,
+		models.Estudiante.est_entidad_id,
+		est_query.c.est_ci,
+		est_query.c.est_nombre,
+		est_query.c.est_primer_appellido,
+		est_query.c.est_segundo_appellido,
+		est_query.c.est_email,		
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id	
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id	
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id	
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).where(models.Asignacion_Tarea.asg_activa == True
+		).where(prf_query.c.prf_email == email
+		).all()	
+	
+	return db_profesor_asgnaciones
+	
+@app.get("/leer_cliente_asgignaciones/{email}", status_code=status.HTTP_201_CREATED)  
+async def leer_cliente_asgignaciones(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["cliente"])],
+					email: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.ci.label('est_ci'),
+		models.User.nombre.label('est_nombre'),
+		models.User.primer_appellido.label('est_primer_appellido'),
+		models.User.segundo_appellido.label('est_segundo_appellido'),
+		models.User.email.label('est_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.ci.label('prf_ci'),
+		models.User.nombre.label('prf_nombre'),
+		models.User.primer_appellido.label('prf_primer_appellido'),
+		models.User.segundo_appellido.label('prf_segundo_appellido'),
+		models.User.email.label('prf_email'),	
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.ci.label('cli_ci'),
+		models.User.nombre.label('cli_nombre'),
+		models.User.primer_appellido.label('cli_primer_appellido'),
+		models.User.segundo_appellido.label('cli_segundo_appellido'),
+		models.User.email.label('cli_email'),	
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las asignaciones
+	db_cliente_asgnaciones = db.query(
+		#Datos de Asignacion
+		models.Asignacion_Tarea.id_asignacion,
+		models.Asignacion_Tarea.asg_descripcion,
+		models.Asignacion_Tarea.asg_fecha_inicio,
+		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,
+		models.Asignacion_Tarea.asg_evaluacion,
+		models.Asignacion_Tarea.asg_tipo_tarea_id,
+		models.Asignacion_Tarea.asg_estudiante_id,
+		models.Asignacion_Tarea.asg_conc_id,
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.id_tipo_tarea,
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.id_conc_tema,
+		models.Concertacion_Tema.conc_tema,
+		models.Concertacion_Tema.conc_profesor_id,						
+		models.Concertacion_Tema.conc_cliente_id,
+		#Datos de Estudiante
+		models.Estudiante.id_estudiante,
+		models.Estudiante.est_entidad_id,
+		est_query.c.est_ci,
+		est_query.c.est_nombre,
+		est_query.c.est_primer_appellido,
+		est_query.c.est_segundo_appellido,
+		est_query.c.est_email,		
+		#Datos de profesor
+		models.Profesor.id_profesor,			
+		prf_query.c.prf_ci,
+		prf_query.c.prf_nombre,
+		prf_query.c.prf_primer_appellido,
+		prf_query.c.prf_segundo_appellido,
+		prf_query.c.prf_email,		
+		models.Profesor.prf_entidad_id,
+		#Datos de cliente
+		models.Cliente.id_cliente,
+		cli_query.c.cli_ci,
+		cli_query.c.cli_nombre,
+		cli_query.c.cli_primer_appellido,
+		cli_query.c.cli_segundo_appellido,
+		cli_query.c.cli_email,		
+		models.Cliente.cli_entidad_id,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id	
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+		).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Estudiante.est_entidad_id	
+		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id	
+		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+		).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+		).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id	
+		).where(models.Asignacion_Tarea.asg_activa == True
+		).where(cli_query.c.cli_email == email
+		).all()	
+	
+	return db_cliente_asgnaciones
 	
 @app.delete("/eliminar_asgignacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
 async def eliminar_asgignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
@@ -1302,13 +1871,13 @@ async def actualizar_asignacion_tarea(current_user: Annotated[schemas.User, Secu
 @app.put("/actualizar_asignacion_tarea_gestor/{id}", status_code=status.HTTP_201_CREATED) 
 async def actualizar_asignacion_tarea_gestor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
 				id: str, asg_tarea: schemas.Asignacion_Tarea_PUD_Gestor, db: Session = Depends(get_db)):
+				
 	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
 	
 	if db_asg is None:
 		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
 		
 	db_asg.asg_estudiante_id = asg_tarea.asg_estudiante_id
-	db_asg.asg_conc_id = asg_tarea.asg_conc_id
 	
 	db.commit()
 	db.refresh(db_asg)	
@@ -1325,6 +1894,23 @@ async def actualizar_asignacion_tarea_tipo(current_user: Annotated[schemas.User,
 		
 	db_asg.asg_tipo_tarea_id = asg_tarea.asg_tipo_tarea_id
 	
+	db.commit()
+	db.refresh(db_asg)	
+	return {"Result": "Datos para el tipo de tarea de la asignacion actualizados satisfactoriamente"}	
+	
+@app.put("/activar_asignacion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
+async def activar_asignacion_tarea(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])], 
+				id: str, db: Session = Depends(get_db)):
+	
+	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()	
+	if db_asg is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
+		
+	if db_asg.asg_activa == True:
+		db_asg.asg_activa = False 
+	else: 
+		db_asg.asg_activa = True 
+		
 	db.commit()
 	db.refresh(db_asg)	
 	return {"Result": "Datos para el tipo de tarea de la asignacion actualizados satisfactoriamente"}	
@@ -1352,7 +1938,59 @@ async def crear_actividad_tarea(current_user: Annotated[schemas.User, Depends(ge
 	except IntegrityError as e:
 		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Actividades_Tarea")
 	except SQLAlchemyError as e: 
+		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Actividades_Tarea")	
+
+@app.post("/crear_actividad_tarea_estudiante/{id}", status_code=status.HTTP_201_CREATED)
+async def crear_actividad_tarea_estudiante(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["estudiante"])],
+					id: str, act_tarea: schemas.Actividades_Tarea_Est, db: Session = Depends(get_db)):
+					
+	db_asignacion = db.query(models.Asignacion_Tarea).where(models.Asignacion_Tarea.id_asignacion == id).first()
+	
+	if db_actividad_tarea is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tarea seleccionada no existe en la base de datos")
+	
+	try:
+		db_act_tarea = models.Actividades_Tarea(
+			act_nombre = act_tarea.act_nombre,
+			act_est_memo = act_tarea.act_est_memo,
+			act_resultado = "Iniciada",
+			id_asg_act = db_asignacion.id_asignacion		
+		)			
+		db.add(db_act_tarea)   	
+		db.commit()
+		db.refresh(db_act_tarea)			
+		return db_act_tarea
+		
+	except IntegrityError as e:
+		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Actividades_Tarea")
+	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Actividades_Tarea")		
+
+@app.post("/crear_actividad_tarea_profesor/{id}", status_code=status.HTTP_201_CREATED)
+async def crear_actividad_tarea_profesor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor"])],
+					id: str, act_tarea: schemas.Actividades_Tarea_Est, db: Session = Depends(get_db)):
+					
+	db_asignacion = db.query(models.Asignacion_Tarea).where(models.Asignacion_Tarea.id_asignacion == id).first()
+	
+	if db_actividad_tarea is None:
+		raise HTTPException(status_code=404, detail="La asignacion de tarea seleccionada no existe en la base de datos")
+	
+	try:
+		db_act_tarea = models.Actividades_Tarea(
+			act_nombre = act_tarea.act_nombre,
+			act_prof_memo = act_tarea.act_prof_memo,
+			act_resultado = "Iniciada",
+			id_asg_act = db_asignacion.id_asignacion		
+		)			
+		db.add(db_act_tarea)   	
+		db.commit()
+		db.refresh(db_act_tarea)			
+		return db_act_tarea
+		
+	except IntegrityError as e:
+		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Actividades_Tarea")
+	except SQLAlchemyError as e: 
+		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Actividades_Tarea")				
 
 @app.get("/leer_actividades_tareas/", status_code=status.HTTP_201_CREATED)  
 async def leer_actividades_tareas(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente", "estudiante"])],
@@ -1360,6 +1998,22 @@ async def leer_actividades_tareas(current_user: Annotated[schemas.User, Security
 	db_actividades_tareas = db.query(models.Actividades_Tarea).all()	
 	
 	return db_actividades_tareas
+	
+@app.get("/leer_actividades_tareas_asignacion/{id}", status_code=status.HTTP_201_CREATED)  
+async def leer_actividades_tareas_asignacion(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["estudiante"])],
+					id: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+	
+	#Datos para predecir las asignaciones
+	act_query = db.query(
+		models.Actividades_Tarea.act_nombre,
+		models.Actividades_Tarea.act_prof_memo,
+		models.Actividades_Tarea.act_resultado,
+		models.Actividades_Tarea.id_asg_act,
+		).select_from(models.Actividades_Tarea
+		).where(models.Actividades_Tarea.id_asg_act == id
+		).all()	
+	
+	return act_query
 	
 @app.delete("/eliminar_actividad_tarea/{id}", status_code=status.HTTP_201_CREATED) 
 async def eliminar_actividad_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],

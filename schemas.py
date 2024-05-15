@@ -243,6 +243,9 @@ class Concertacion_Tema_InDB(Concertacion_Tema):
 class Concertacion_Tema_Eval(BaseModel):
 	conc_evaluacion : str #Positiva, Ngativa, Mejorable
 	
+class Concertacion_Tema_Activate(BaseModel):
+	conc_activa : bool
+	
 class Concertacion_Tema_UPD(BaseModel):
 	conc_tema : str
 	conc_descripcion : str
@@ -291,8 +294,9 @@ class Asignacion_Tarea_InDB(Asignacion_Tarea):
 	id_asignacion : str	
 	asg_asignada : bool	
 	asg_activa : bool
-	asg_evaluacion : Union[float, None] = None
+	asg_evaluacion : Union[str, None] = None
 	asg_evaluacion_pred : Union[str, None] = None
+	
 
 class Asignacion_Tarea_Eval(BaseModel):
 	asg_evaluacion : str
@@ -309,11 +313,28 @@ class Asignacion_Tarea_UPD_Tipo(BaseModel):
 	
 class Asignacion_Tarea_PUD_Gestor(BaseModel):	
 	asg_estudiante_id : str
-	asg_conc_id : str
+	
+class Asignacion_Tarea_Activate(BaseModel):
+	asg_activa : bool
 	
 #-------------------------
 #--- ACTIVIDADES TAREA ---
 #-------------------------
+class Actividades_Tarea_Est(BaseModel):		
+	act_nombre : str
+	act_est_memo : str
+	id_asg_act : str	
+	
+class Actividades_Tarea_Prf(BaseModel):		
+	act_nombre : str
+	act_prof_memo : str
+	id_asg_act : str	
+	
+class Actividades_Tarea_Cli(BaseModel):		
+	act_nombre : str
+	act_cli_memo : str
+	id_asg_act : str	
+	
 class Actividades_Tarea(BaseModel):		
 	act_nombre : str
 	act_est_memo : str
