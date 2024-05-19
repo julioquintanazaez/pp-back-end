@@ -150,8 +150,8 @@ class Concertacion_Tema(Base):
 	conc_valoracion_cliente = Column(String(200), nullable=False, index=True)
 	conc_complejidad = Column(String(15), nullable=False, index=True) #Alta, Baja, Media	
 	conc_activa = Column(Boolean, nullable=False, index=True, default=True) 
-	conc_evaluacion = Column(String(15), nullable=True, index=True) #Positiva, Negativa, Mejorable
-	conc_evaluacion_pred = Column(String(15), nullable=True, index=True) #Positiva, Negativa, Mejorable
+	conc_evaluacion = Column(String(15), nullable=True, index=True) #Positiva, Mejorable
+	conc_evaluacion_pred = Column(String(15), nullable=True, index=True) #Positiva, Mejorable
 	conc_actores_externos = Column(Integer, nullable=False,  index=True) #Número de miembros en el equipo
 	#Id de asociacion
 	conc_profesor_id = Column(GUID, ForeignKey('profesor.id_profesor'), primary_key=True)   
@@ -178,8 +178,8 @@ class Asignacion_Tarea(Base):
 	asg_participantes = Column(Integer, nullable=False,  index=True) #Número de miembros en el equipo
 	asg_asignada = Column(Boolean, nullable=True, index=True, default=True) 
 	asg_activa = Column(Boolean, nullable=False, index=True, default=True) 
-	asg_evaluacion = Column(String(15), nullable=True, index=True) #Positiva, Negativa, Mejorable
-	asg_evaluacion_pred = Column(String(15), nullable=True, index=True) #Positiva, Negativa, Mejorable 
+	asg_evaluacion = Column(String(15), nullable=True, index=True) #Positiva, Mejorable
+	asg_evaluacion_pred = Column(String(15), nullable=True, index=True) #Positiva, Mejorable 
 	#Relacion M-1 con tabla Padre "Tipo_Tarea"
 	asg_tipo_tarea_id = Column(GUID, ForeignKey("tipo_tarea.id_tipo_tarea"))
 	tarea_tipo = relationship("Tipo_Tarea", back_populates="tarea_asignacion")

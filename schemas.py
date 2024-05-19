@@ -328,12 +328,10 @@ class Actividades_Tarea_Est(BaseModel):
 class Actividades_Tarea_Prf(BaseModel):		
 	act_nombre : str
 	act_prof_memo : str
-	id_asg_act : str	
 	
 class Actividades_Tarea_Cli(BaseModel):		
 	act_nombre : str
 	act_cli_memo : str
-	id_asg_act : str	
 	
 class Actividades_Tarea(BaseModel):		
 	act_nombre : str
