@@ -42,6 +42,7 @@ from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 import joblib
+import json
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -216,6 +217,10 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 def index():
 	return {"Application": "Hello from developers"}
 	
+@app.get("/users/me", response_model=schemas.User)
+async def read_users_me(current_user: Annotated[schemas.User, Depends(get_current_user)]):
+	return current_user
+
 @app.get("/get_restricted_user")
 async def get_restricted_user(current_user: Annotated[schemas.User, Depends(get_current_active_user)]):
     return current_user
@@ -228,9 +233,6 @@ async def get_authenticated_admin_resources(current_user: Annotated[schemas.User
 async def get_authenticated_edition_resources(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["cliente"])]):
     return current_user
 	
-@app.get("/get_user_status", response_model=schemas.User)
-async def get_user_status(current_user: Annotated[schemas.User, Depends(get_current_user)]):
-    return current_user
 	
 #########################
 ###   USERS ADMIN  ######
@@ -585,14 +587,15 @@ async def eliminar_profesor(current_user: Annotated[schemas.User, Depends(get_cu
 						).first()
 	if db_profesor is None:
 		raise HTTPException(status_code=404, detail="El profesor no existe en la base de datos")		
-	db.delete(db_profesor)	
-	db.commit()
-	
+		
 	#Disable el profesor 
 	db_user = db.query(models.User).filter(models.User.id == db_profesor.user_profesor_id).first()
-	db_user.disable = True
+	db_user.disable = True	
+	db.refresh(db_user)		
+	
+	db.delete(db_profesor)	
 	db.commit()
-	db.refresh(db_user)	
+	db.refresh(db_profesor)		
 	
 	return {"Result": "Profesor eliminado satisfactoriamente"}
 	
@@ -825,14 +828,15 @@ async def eliminar_estudiante(current_user: Annotated[schemas.User, Depends(get_
 						).first()
 	if db_estudiante is None:
 		raise HTTPException(status_code=404, detail="El estudiante no existe en la base de datos")	
-	db.delete(db_estudiante)	
-	db.commit()
-	
+		
 	#Disable el estudiante
 	db_user = db.query(models.User).filter(models.User.id == db_estudiante.user_estudiante_id).first()
 	db_user.disable = True
-	db.commit()
 	db.refresh(db_user)	
+	
+	db.delete(db_estudiante)	
+	db.commit()
+	db.refresh(db_estudiante)	
 	
 	return {"Result": "Estudiante eliminado satisfactoriamente"}
 	
@@ -868,7 +872,7 @@ async def crear_cliente(current_user: Annotated[schemas.User, Depends(get_curren
 	try:
 		db_cliente = models.Cliente(
 			cli_genero = cliente.cli_genero,
-			cli_estado_civil = cliente.cli_estado_civil,  #Soltero, Casado, Divorciado, Viudo
+			cli_estado_civil = cliente.cli_estado_civil,  #Soltero, Casado, Divorciado
 			cli_numero_empleos = cliente.cli_numero_empleos,
 			cli_hijos = cliente.cli_hijos, 
 			cli_pos_tecnica_trabajo = cliente.cli_pos_tecnica_trabajo,
@@ -892,7 +896,7 @@ async def crear_cliente(current_user: Annotated[schemas.User, Depends(get_curren
 		db.commit()
 		db.refresh(db_user)	
 		
-		return db_cliente
+		return db_cliente 
 		
 	except IntegrityError as e:
 		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Cliente")
@@ -970,14 +974,15 @@ async def eliminar_cliente(current_user: Annotated[schemas.User, Depends(get_cur
 						).first()
 	if db_cliente is None:
 		raise HTTPException(status_code=404, detail="El cliente no existe en la base de datos")	
-	db.delete(db_cliente)	
-	db.commit()
-	
+		
 	#Disable el cliente
 	db_user = db.query(models.User).filter(models.User.id == db_cliente.user_cliente_id).first()
 	db_user.disable = True
-	db.commit()
 	db.refresh(db_user)	
+	
+	db.delete(db_cliente)	
+	db.commit()
+	db.refresh(db_cliente)	
 	
 	return {"Result": "Cliente eliminado satisfactoriamente"}
 	
@@ -1882,21 +1887,6 @@ async def actualizar_asignacion_tarea(current_user: Annotated[schemas.User, Secu
 	db.refresh(db_asg)	
 	return {"Result": "Datos de la asignacion actualizados satisfactoriamente"}	
 	
-@app.put("/actualizar_asignacion_tarea_gestor/{id}", status_code=status.HTTP_201_CREATED) 
-async def actualizar_asignacion_tarea_gestor(current_user: Annotated[schemas.User, Security(get_current_user, scopes=[ "profesor", "cliente"])], 
-				id: str, asg_tarea: schemas.Asignacion_Tarea_PUD_Gestor, db: Session = Depends(get_db)):
-				
-	db_asg = db.query(models.Asignacion_Tarea).filter(models.Asignacion_Tarea.id_asignacion == id).first()
-	
-	if db_asg is None:
-		raise HTTPException(status_code=404, detail="La asignacion de tareas seleccionada no existen en la base de datos")
-		
-	db_asg.asg_estudiante_id = asg_tarea.asg_estudiante_id
-	
-	db.commit()
-	db.refresh(db_asg)	
-	return {"Result": "Datos sobre encargados de la gestion de la asignacion actualizados satisfactoriamente"}	
-	
 @app.put("/actualizar_asignacion_tarea_tipo/{id}", status_code=status.HTTP_201_CREATED) 
 async def actualizar_asignacion_tarea_tipo(current_user: Annotated[schemas.User, Security(get_current_user, scopes=["profesor", "cliente"])], 
 				id: str, asg_tarea: schemas.Asignacion_Tarea_UPD_Tipo, db: Session = Depends(get_db)):
@@ -2618,6 +2608,8 @@ async def csv_registros_concertaciones(current_user: Annotated[schemas.User, Dep
 		models.Entidad_Destino.dest_transporte,
 		models.Entidad_Destino.dest_experiencia,
 		models.Entidad_Destino.dest_trab_remoto,
+		#Evaluacion
+		models.Concertacion_Tema.conc_evaluacion,
 		).select_from(models.Concertacion_Tema
 		).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
 		).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
@@ -2632,7 +2624,8 @@ async def csv_registros_concertaciones(current_user: Annotated[schemas.User, Dep
 	columns_cli = ["cli_genero","cli_estado_civil","cli_numero_empleos","cli_hijos","cli_cargo","cli_categoria_docente","cli_categoria_cientifica","cli_experiencia_practicas","cli_numero_est_atendidos","cli_trab_remoto"]
 	columns_org = ["org_transporte","org_trab_remoto"]
 	columns_des = ["dest_transporte","dest_experiencia","dest_trab_remoto"]
-	columns = columns_conc + columns_prf + columns_cli + columns_org + columns_des
+	columns_eval=["conc_evaluacion"]
+	columns = columns_conc + columns_prf + columns_cli + columns_org + columns_des + columns_eval
 	
 	myfile = create_csv(db_concertaciones, columns)	
 	headers = {'Content-Disposition': 'attachment; filename="concertaciones.csv"'} 
@@ -2654,6 +2647,246 @@ async def csv_registros_asignaciones(current_user: Annotated[schemas.User, Depen
 	db_asignaciones = db.query(
 		#Datos de Asignacion
 		models.Asignacion_Tarea.asg_complejidad_estimada,
+		models.Asignacion_Tarea.asg_participantes,		
+		#Datos Tipo de tarea
+		models.Tipo_Tarea.tarea_tipo_nombre,
+		#Datos de Concertacion
+		models.Concertacion_Tema.conc_complejidad,
+		models.Concertacion_Tema.conc_actores_externos,		
+		#Datos de Estudiante
+		models.Estudiante.est_genero,  
+		models.Estudiante.est_estado_civil,
+		models.Estudiante.est_trabajo,
+		models.Estudiante.est_becado,  
+		models.Estudiante.est_hijos, 
+		models.Estudiante.est_posibilidad_economica,
+		models.Estudiante.est_trab_remoto,
+		#Evaluacion
+		models.Asignacion_Tarea.asg_evaluacion,
+		).select_from(models.Asignacion_Tarea
+		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id												
+		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id		
+		).all()		
+	
+	columns_asg=["asg_complejidad_estimada","asg_participantes"]
+	columns_tipo=["tarea_tipo_nombre"]
+	columns_conc=["conc_complejidad","conc_actores_externos"]
+	columns_est=["est_genero","est_estado_civil","est_trabajo","est_becado","est_hijos"," est_posibilidad_economica","est_trab_remoto"]
+	columns_eval=["asg_evaluacion"]
+	columns = columns_asg + columns_tipo + columns_conc + columns_est + columns_eval
+	
+	myfile = create_csv(db_asignaciones, columns)	
+	headers = {'Content-Disposition': 'attachment; filename="asignaciones.csv"'} 
+	return StreamingResponse(iter([myfile.getvalue()]), media_type="application/csv", headers=headers)	
+
+#############################
+##### ENTRENAR MODELOS ######
+#############################
+@app.get("/entrenar_modelo_concertacion/")
+async def entrenar_modelo_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+					db: Session = Depends(get_db)):
+					
+	#leer datos desde csv
+	datos = pd.read_csv("concertaciones.csv", encoding="utf-8")
+	#Crear DataFrame
+	#Si lo tenemos que leer desde una consulta SQL
+	#Particionar los datos
+	X = datos.drop(["conc_evaluacion"],axis=1)
+	y = datos.conc_evaluacion.values	
+	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=125)
+	
+	#Transform data
+	# Transformar los datos numericos
+	numerical_transformer = Pipeline(steps=[
+		('imputer', SimpleImputer(strategy='mean')),
+		('scaler', MinMaxScaler())
+	])
+	# Transformar los datos categoricos
+	categorical_transformer = Pipeline(steps=[
+		('imputer', SimpleImputer(strategy='most_frequent')),
+		('encoder', OrdinalEncoder())
+	])
+	#Crear la PipeLine
+	# Combinar las pipelines de preprocesado de datos usando ColumnTransformer
+	preproc_pipe = ColumnTransformer(
+		transformers=[
+			('num', numerical_transformer, make_column_selector(dtype_include=np.number)),
+			('cat', categorical_transformer, make_column_selector(dtype_include=object))
+		], remainder="passthrough"
+	)	
+	#Crear modelo RandomForest Classifier
+	rf_model = RandomForestClassifier(n_estimators=100, random_state=125)
+	#Crear pipeline de preprocesado de datos y prediccion
+	rf_pipe = Pipeline(
+		steps=[		   
+			("preprocessor", preproc_pipe),
+			("rf", rf_model),
+		]
+	)
+	#Entrenar pipeline modelo
+	rf_pipe.fit(X_train,y_train)
+	# model accuracy
+	#predictions = rf_pipe.predict(X_test)
+	#Salvar modelo
+	joblib.dump(rf_pipe, 'conc_rf_model.pkl')
+	 
+	return {"Result":"Done"}
+	
+@app.get("/entrenar_modelo_asignacion_tarea/")
+async def entrenar_modelo_asignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+					db: Session = Depends(get_db)):
+					
+	#leer datos desde csv
+	datos = pd.read_csv("asignaciones.csv", encoding="utf-8")
+	#Crear DataFrame
+	#Si lo tenemos que leer desde una consulta SQL
+	#Particionar los datos
+	X = datos.drop(["asg_evaluacion"],axis=1)
+	y = datos.asg_evaluacion.values	
+	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=125)
+	
+	#Transform data 
+	# Transformar los datos numericos
+	numerical_transformer = Pipeline(steps=[
+		('imputer', SimpleImputer(strategy='mean')),
+		('scaler', MinMaxScaler())
+	])
+	# Transformar los datos categoricos
+	categorical_transformer = Pipeline(steps=[
+		('imputer', SimpleImputer(strategy='most_frequent')),
+		('encoder', OrdinalEncoder())
+	])
+	#Crear la PipeLine
+	# Combinar las pipelines de preprocesado de datos usando ColumnTransformer
+	preproc_pipe = ColumnTransformer(
+		transformers=[
+			('num', numerical_transformer, make_column_selector(dtype_include=np.number)),
+			('cat', categorical_transformer, make_column_selector(dtype_include=object))
+		], remainder="passthrough"
+	)	
+	#Crear modelo RandomForest Classifier
+	rf_model = RandomForestClassifier(n_estimators=100, random_state=125)
+	#Crear pipeline de preprocesado de datos y prediccion
+	rf_pipe = Pipeline(
+		steps=[		   
+			("preprocessor", preproc_pipe),
+			("rf", rf_model),
+		]
+	)
+	#Entrenar pipeline modelo
+	rf_pipe.fit(X_train,y_train)
+	# model accuracy
+	#predictions = rf_pipe.predict(X_test)
+	#Salvar modelo
+	joblib.dump(rf_pipe, 'asg_rf_model.pkl')
+	 
+	return {"Result":"Done"}
+
+#############################
+#######  PREDICCIONES  ######
+#############################
+	
+@app.get("/predecir_concertacion/{id}")
+async def predecir_concertacion(current_user: Annotated[schemas.User, Depends(get_current_user)],
+					id: str, db: Session = Depends(get_db)):
+	
+	#Datos Profesor
+	prf_query = db.query(
+		models.User.id.label('prf_user_id'),
+		models.User.nombre.label('prf_nombre'),
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos Cliente
+	cli_query = db.query(
+		models.User.id.label('cli_user_id'),
+		models.User.nombre.label('cli_nombre'),
+	).select_from(
+		models.User
+	).subquery()	
+	
+	#Datos para predecir las concertaciones				
+	db_concertacio = db.query(
+		#Datos de Concertacion
+		models.Concertacion_Tema.conc_complejidad,
+		models.Concertacion_Tema.conc_actores_externos,
+		#Datos de profesor
+		models.Profesor.prf_genero,
+		models.Profesor.prf_estado_civil,
+		models.Profesor.prf_numero_empleos,
+		models.Profesor.prf_hijos,
+		models.Profesor.prf_cargo,
+		models.Profesor.prf_categoria_docente,
+		models.Profesor.prf_categoria_cientifica,
+		models.Profesor.prf_experiencia_practicas,
+		models.Profesor.prf_numero_est_atendidos,
+		models.Profesor.prf_trab_remoto,
+		#Datos de cliente
+		models.Cliente.cli_genero,
+		models.Cliente.cli_estado_civil,
+		models.Cliente.cli_numero_empleos,
+		models.Cliente.cli_hijos,
+		models.Cliente.cli_cargo,
+		models.Cliente.cli_categoria_docente,
+		models.Cliente.cli_categoria_cientifica,
+		models.Cliente.cli_experiencia_practicas,
+		models.Cliente.cli_numero_est_atendidos,
+		models.Cliente.cli_trab_remoto,
+		#Datos Entidad Origen
+		models.Entidad_Origen.org_transporte,
+		models.Entidad_Origen.org_trab_remoto,
+		#Datos Entidad Destino
+		models.Entidad_Destino.dest_transporte,
+		models.Entidad_Destino.dest_experiencia,
+		models.Entidad_Destino.dest_trab_remoto,
+	).select_from(models.Concertacion_Tema
+	).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
+	).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
+	).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
+	).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id			
+	).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
+	).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id	
+	).where(models.Concertacion_Tema.id_conc_tema == id  
+	).statement
+					
+	#Preparando datos
+	datos = pd.read_sql(db_concertacio, con=engine)	
+	#Leer modelo
+	loaded_modelo = joblib.load('conc_rf_model.pkl')
+	
+	#Realizar prediccion
+	if datos.empty:
+		raise HTTPException(status_code=404, detail="No existen ejemplos para predecir")
+		
+	prediccion = loaded_modelo.predict(datos)
+	prob = loaded_modelo.predict_proba(datos)
+	resdic = {
+		"clase": prediccion[0],
+		"prob1": prob[0][0],
+		"prob2": prob[0][1]
+	}
+	
+	return resdic
+	
+@app.get("/predecir_asignacion/{id}")
+async def predecir_asignacion(current_user: Annotated[schemas.User, Depends(get_current_user)],
+					id: str, db: Session = Depends(get_db)):
+	
+	#Datos Estudiante
+	est_query = db.query(
+		models.User.id.label('est_user_id'),
+		models.User.nombre.label('est_nombre'),
+	).select_from(
+		models.User
+	).subquery()
+	
+	#Datos para predecir las actividades de tareas			
+	db_actividades_asig = db.query(							
+		#Datos de Asignacion
+		models.Asignacion_Tarea.asg_complejidad_estimada,
 		models.Asignacion_Tarea.asg_participantes,
 		#Datos Tipo de tarea
 		models.Tipo_Tarea.tarea_tipo_nombre,
@@ -2668,23 +2901,34 @@ async def csv_registros_asignaciones(current_user: Annotated[schemas.User, Depen
 		models.Estudiante.est_hijos, 
 		models.Estudiante.est_posibilidad_economica,
 		models.Estudiante.est_trab_remoto,
-		).select_from(models.Asignacion_Tarea
-		).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
-		).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
-		).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id												
-		).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id		
-		).all()		
-	
-	columns_asg=["asg_complejidad_estimada","asg_participantes"]
-	columns_tipo=["tarea_tipo_nombre"]
-	columns_conc=["conc_complejidad","conc_actores_externos"]
-	columns_est=["est_genero","est_estado_civil","est_trabajo","est_becado","est_hijos"," est_posibilidad_economica","est_trab_remoto"]
-	columns = columns_asg + columns_tipo + columns_conc + columns_est
-	
-	myfile = create_csv(db_asignaciones, columns)	
-	headers = {'Content-Disposition': 'attachment; filename="asignaciones.csv"'} 
-	return StreamingResponse(iter([myfile.getvalue()]), media_type="application/csv", headers=headers)	
+	).select_from(models.Asignacion_Tarea		
+	).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
+	).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
+	).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id
+	).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
+	).where(models.Asignacion_Tarea.id_asignacion == id
+	).statement
+				
+	#Preparando datos
+	datos = pd.read_sql(db_actividades_asig, con=engine)
+	print(datos.head())
+	#Leer modelo
+	loaded_modelo = joblib.load('asg_rf_model.pkl')
+	#Realizar prediccion
+	if datos.empty:
+		raise HTTPException(status_code=404, detail="No existen ejemplos para predecir")
+		
+	prediccion = loaded_modelo.predict(datos)
+	prob = loaded_modelo.predict_proba(datos)
+	resdic = {
+		"clase": prediccion[0],
+		"prob1": prob[0][0],
+		"prob2": prob[0][1]
+	}
 
+	return resdic
+	
+	
 #############################
 #######  ESTADISTICAS  ######
 #############################	
@@ -2803,231 +3047,3 @@ async def estadisticas_actividades_asignacion(current_user: Annotated[schemas.Us
 						
 	return {"Return":"Res"}
 	
-	
-#############################
-##### ENTRENAR MODELOS ######
-#############################
-@app.get("/entrenar_modelo_concertacion/")
-async def entrenar_modelo_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-					db: Session = Depends(get_db)):
-					
-	#leer datos desde csv
-	datos = pd.read_csv("concertaciones.csv", encoding="utf-8")
-	#Crear DataFrame
-	#Si lo tenemos que leer desde una consulta SQL
-	#Particionar los datos
-	X = datos.drop(["conc_evaluacion"],axis=1)
-	y = datos.conc_evaluacion.values	
-	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=125)
-	
-	#Transform data
-	# Transformar los datos numericos
-	numerical_transformer = Pipeline(steps=[
-		('imputer', SimpleImputer(strategy='mean')),
-		('scaler', MinMaxScaler())
-	])
-	# Transformar los datos categoricos
-	categorical_transformer = Pipeline(steps=[
-		('imputer', SimpleImputer(strategy='most_frequent')),
-		('encoder', OrdinalEncoder())
-	])
-	#Crear la PipeLine
-	# Combinar las pipelines de preprocesado de datos usando ColumnTransformer
-	preproc_pipe = ColumnTransformer(
-		transformers=[
-			('num', numerical_transformer, make_column_selector(dtype_include=np.number)),
-			('cat', categorical_transformer, make_column_selector(dtype_include=object))
-		], remainder="passthrough"
-	)	
-	#Crear modelo RandomForest Classifier
-	rf_model = RandomForestClassifier(n_estimators=100, random_state=125)
-	#Crear pipeline de preprocesado de datos y prediccion
-	rf_pipe = Pipeline(
-		steps=[		   
-			("preprocessor", preproc_pipe),
-			("rf", rf_model),
-		]
-	)
-	#Entrenar pipeline modelo
-	rf_pipe.fit(X_train,y_train)
-	# model accuracy
-	#predictions = rf_pipe.predict(X_test)
-	#Salvar modelo
-	joblib.dump(rf_pipe, 'conc_rf_model.pkl')
-	 
-	return {"Result":"Done"}
-	
-@app.get("/entrenar_modelo_asignacion_tarea/")
-async def entrenar_modelo_asignacion_tarea(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-					db: Session = Depends(get_db)):
-					
-	#leer datos desde csv
-	datos = pd.read_csv("asignaciones.csv", encoding="utf-8")
-	#Crear DataFrame
-	#Si lo tenemos que leer desde una consulta SQL
-	#Particionar los datos
-	X = datos.drop(["asg_evaluacion"],axis=1)
-	y = datos.asg_evaluacion.values	
-	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=125)
-	
-	#Transform data 
-	# Transformar los datos numericos
-	numerical_transformer = Pipeline(steps=[
-		('imputer', SimpleImputer(strategy='mean')),
-		('scaler', MinMaxScaler())
-	])
-	# Transformar los datos categoricos
-	categorical_transformer = Pipeline(steps=[
-		('imputer', SimpleImputer(strategy='most_frequent')),
-		('encoder', OrdinalEncoder())
-	])
-	#Crear la PipeLine
-	# Combinar las pipelines de preprocesado de datos usando ColumnTransformer
-	preproc_pipe = ColumnTransformer(
-		transformers=[
-			('num', numerical_transformer, make_column_selector(dtype_include=np.number)),
-			('cat', categorical_transformer, make_column_selector(dtype_include=object))
-		], remainder="passthrough"
-	)	
-	#Crear modelo RandomForest Classifier
-	rf_model = RandomForestClassifier(n_estimators=100, random_state=125)
-	#Crear pipeline de preprocesado de datos y prediccion
-	rf_pipe = Pipeline(
-		steps=[		   
-			("preprocessor", preproc_pipe),
-			("rf", rf_model),
-		]
-	)
-	#Entrenar pipeline modelo
-	rf_pipe.fit(X_train,y_train)
-	# model accuracy
-	#predictions = rf_pipe.predict(X_test)
-	#Salvar modelo
-	joblib.dump(rf_pipe, 'asg_rf_model.pkl')
-	 
-	return {"Result":"Done"}
-
-#############################
-#######  PREDICCIONES  ######
-#############################
-	
-@app.get("/predecir_concertacion/{id}")
-async def predecir_concertacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-					id: str, db: Session = Depends(get_db)):
-	
-	#Datos Profesor
-	prf_query = db.query(
-		models.User.id.label('prf_user_id'),
-		models.User.nombre.label('prf_nombre'),
-	).select_from(
-		models.User
-	).subquery()
-	
-	#Datos Cliente
-	cli_query = db.query(
-		models.User.id.label('cli_user_id'),
-		models.User.nombre.label('cli_nombre'),
-	).select_from(
-		models.User
-	).subquery()	
-	
-	#Datos para predecir las concertaciones				
-	db_concertacio = db.query(
-		#Datos de Concertacion
-		models.Concertacion_Tema.conc_complejidad,
-		models.Concertacion_Tema.conc_actores_externos,
-		#Datos de profesor
-		models.Profesor.prf_genero,
-		models.Profesor.prf_estado_civil,
-		models.Profesor.prf_numero_empleos,
-		models.Profesor.prf_hijos,
-		models.Profesor.prf_cargo,
-		models.Profesor.prf_categoria_docente,
-		models.Profesor.prf_categoria_cientifica,
-		models.Profesor.prf_experiencia_practicas,
-		models.Profesor.prf_numero_est_atendidos,
-		models.Profesor.prf_trab_remoto,
-		#Datos de cliente
-		models.Cliente.cli_genero,
-		models.Cliente.cli_estado_civil,
-		models.Cliente.cli_numero_empleos,
-		models.Cliente.cli_hijos,
-		models.Cliente.cli_cargo,
-		models.Cliente.cli_categoria_docente,
-		models.Cliente.cli_categoria_cientifica,
-		models.Cliente.cli_experiencia_practicas,
-		models.Cliente.cli_numero_est_atendidos,
-		models.Cliente.cli_trab_remoto,
-		#Datos Entidad Origen
-		models.Entidad_Origen.org_transporte,
-		models.Entidad_Origen.org_trab_remoto,
-		#Datos Entidad Destino
-		models.Entidad_Destino.dest_transporte,
-		models.Entidad_Destino.dest_experiencia,
-		models.Entidad_Destino.dest_trab_remoto,
-	).select_from(models.Concertacion_Tema
-	).join(models.Profesor, models.Profesor.id_profesor == models.Concertacion_Tema.conc_profesor_id
-	).join(prf_query, prf_query.c.prf_user_id == models.Profesor.user_profesor_id	
-	).join(models.Cliente, models.Cliente.id_cliente == models.Concertacion_Tema.conc_cliente_id	
-	).join(cli_query, cli_query.c.cli_user_id == models.Cliente.user_cliente_id			
-	).join(models.Entidad_Origen, models.Entidad_Origen.id_entidad_origen == models.Profesor.prf_entidad_id
-	).join(models.Entidad_Destino, models.Entidad_Destino.id_entidad_destino == models.Cliente.cli_entidad_id	
-	).where(models.Concertacion_Tema.id_conc_tema == id  
-	).statement
-					
-	#Preparando datos
-	datos = pd.read_sql(db_concertacio, con=engine)	
-	#Leer modelo
-	loaded_modelo = joblib.load('conc_rf_model.pkl')
-	#Realizar prediccion
-	prediccion = loaded_modelo.predict(datos)
-	
-	return {"Return":prediccion[0]}
-	
-@app.get("/predecir_asignacion/{id}")
-async def predecir_asignacion(current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-					id: str, db: Session = Depends(get_db)):
-	
-	#Datos Estudiante
-	est_query = db.query(
-		models.User.id.label('est_user_id'),
-		models.User.nombre.label('est_nombre'),
-	).select_from(
-		models.User
-	).subquery()
-	
-	#Datos para predecir las actividades de tareas			
-	db_actividades_asig = db.query(							
-		#Datos de Asignacion
-		models.Asignacion_Tarea.asg_complejidad_estimada,
-		models.Asignacion_Tarea.asg_participantes,
-		#Datos Tipo de tarea
-		models.Tipo_Tarea.tarea_tipo_nombre,
-		#Datos de Concertacion
-		models.Concertacion_Tema.conc_complejidad,
-		models.Concertacion_Tema.conc_actores_externos,
-		#Datos de Estudiante
-		models.Estudiante.est_genero,  
-		models.Estudiante.est_estado_civil,
-		models.Estudiante.est_trabajo,
-		models.Estudiante.est_becado,  
-		models.Estudiante.est_hijos, 
-		models.Estudiante.est_posibilidad_economica,
-		models.Estudiante.est_trab_remoto,
-	).select_from(models.Actividades_Tarea		
-	).join(models.Asignacion_Tarea, models.Asignacion_Tarea.id_asignacion == models.Actividades_Tarea.id_asg_act
-	).join(models.Tipo_Tarea, models.Tipo_Tarea.id_tipo_tarea == models.Asignacion_Tarea.asg_tipo_tarea_id
-	).join(models.Concertacion_Tema, models.Concertacion_Tema.id_conc_tema == models.Asignacion_Tarea.asg_conc_id
-	).join(models.Estudiante, models.Estudiante.id_estudiante == models.Asignacion_Tarea.asg_estudiante_id
-	).join(est_query, est_query.c.est_user_id == models.Estudiante.user_estudiante_id	
-	).where(models.Asignacion_Tarea.id_asignacion == id
-	).statement
-				
-	#Preparando datos
-	datos = pd.read_sql(db_actividades_asig, con=engine)	
-	#Leer modelo
-	loaded_modelo = joblib.load('asg_rf_model.pkl')
-	#Realizar prediccion
-	prediccion = loaded_modelo.predict(datos)
-	
-	return {"Return":prediccion[0]}	

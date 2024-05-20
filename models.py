@@ -36,9 +36,9 @@ class User(Base):
 	disable = Column(Boolean, nullable=True, default=False)	
 	hashed_password = Column(String(100), nullable=True, default=False)	
 	#Relation (One-to-One) with tables Profesor, Cliene, Estudiante
-	profesor = relationship("Profesor", uselist=False, back_populates="user_profesor")
-	cliente = relationship("Cliente", uselist=False, back_populates="user_cliente")
-	estudiante = relationship("Estudiante", uselist=False, back_populates="user_estudiante")
+	profesor = relationship("Profesor", uselist=False, back_populates="user_profesor", cascade="all, delete")
+	cliente = relationship("Cliente", uselist=False, back_populates="user_cliente", cascade="all, delete")
+	estudiante = relationship("Estudiante", uselist=False, back_populates="user_estudiante", cascade="all, delete")
 	
 
 class Entidad_Origen(Base):
@@ -51,9 +51,9 @@ class Entidad_Origen(Base):
 	org_transporte = Column(Boolean, nullable=False, index=True) 
 	org_trab_remoto = Column(Boolean, nullable=False, index=True) 
 	#Relacion 1-M con tabla hija "Estudiante"
-	estudiantes = relationship("Estudiante", back_populates="est_entidad_origen")
+	estudiantes = relationship("Estudiante", back_populates="est_entidad_origen", cascade="all, delete")
 	#Relacion 1-M con tabla hija "Profesor"
-	profesores = relationship("Profesor", back_populates="prf_entidad_origen")
+	profesores = relationship("Profesor", back_populates="prf_entidad_origen", cascade="all, delete")
 
 class Entidad_Destino(Base):
 	__tablename__ = "entidad_destino"
@@ -66,7 +66,7 @@ class Entidad_Destino(Base):
 	dest_experiencia = Column(Boolean, nullable=False, index=True) 
 	dest_trab_remoto = Column(Boolean, nullable=False, index=True) 
 	#Relacion 1-M con tabla hija "Cliente"
-	clientes = relationship("Cliente", back_populates="cli_entidad_destino")
+	clientes = relationship("Cliente", back_populates="cli_entidad_destino", cascade="all, delete")
 	
 class Profesor(Base):
 	__tablename__ = "profesor"
@@ -88,9 +88,9 @@ class Profesor(Base):
 	prf_entidad_id = Column(GUID, ForeignKey("entidad_origen.id_entidad_origen"))
 	prf_entidad_origen = relationship("Entidad_Origen", back_populates="profesores")	
 	#Relacion Many-to-Many con tabla "Cliente" y asiciacion con tabla "Asignacion_Tareas"
-	profesor_concertacion = relationship("Cliente", secondary="concertacion_tema", back_populates="cliente_concertacion") 	
+	profesor_concertacion = relationship("Cliente", secondary="concertacion_tema", back_populates="cliente_concertacion", cascade="all, delete") 	
 	#Relation with User (One-to-One)
-	user_profesor_id = Column(GUID, ForeignKey("user.id"), unique=True)
+	user_profesor_id = Column(GUID, ForeignKey("user.id"))
 	user_profesor = relationship("User", back_populates="profesor")
 	
 class Cliente(Base):
@@ -113,9 +113,9 @@ class Cliente(Base):
 	cli_entidad_id = Column(GUID, ForeignKey("entidad_destino.id_entidad_destino"))
 	cli_entidad_destino = relationship("Entidad_Destino", back_populates="clientes")
 	#Relacion Many-to-Many con tabla "Profesor" y asiciacion con tabla "Concertacion tema"
-	cliente_concertacion = relationship("Profesor", secondary="concertacion_tema", back_populates="profesor_concertacion") 	
+	cliente_concertacion = relationship("Profesor", secondary="concertacion_tema", back_populates="profesor_concertacion", cascade="all, delete") 	
 	#Relation with User (One-to-One)
-	user_cliente_id = Column(GUID, ForeignKey("user.id"), unique=True)
+	user_cliente_id = Column(GUID, ForeignKey("user.id"))
 	user_cliente = relationship("User", back_populates="cliente")
 
 class Estudiante(Base): #Addicionar CI a todos los actores
@@ -133,11 +133,11 @@ class Estudiante(Base): #Addicionar CI a todos los actores
 	est_trab_remoto = Column(Boolean, nullable=False, index=True) 
 	#Relacion M-1 con tabla padre "Entidad_Origen"
 	est_entidad_id = Column(GUID, ForeignKey("entidad_origen.id_entidad_origen"))
-	est_entidad_origen = relationship("Entidad_Origen", back_populates="estudiantes")	
+	est_entidad_origen = relationship("Entidad_Origen", back_populates="estudiantes")
 	#Relacion Many-to-Many con tabla "Concertacion_Tema" se refleja en tabla Asignacion_Tareas
-	est_conc_tarea = relationship("Concertacion_Tema", secondary="asignacion_tarea", back_populates="conce_est_tarea") 
+	est_conc_tarea = relationship("Concertacion_Tema", secondary="asignacion_tarea", back_populates="conce_est_tarea", cascade="all, delete") 
 	#Relation with User (One-to-One)
-	user_estudiante_id = Column(GUID, ForeignKey("user.id"), unique=True)
+	user_estudiante_id = Column(GUID, ForeignKey("user.id"))
 	user_estudiante = relationship("User", back_populates="estudiante")
 
 class Concertacion_Tema(Base):
@@ -157,7 +157,7 @@ class Concertacion_Tema(Base):
 	conc_profesor_id = Column(GUID, ForeignKey('profesor.id_profesor'), primary_key=True)   
 	conc_cliente_id = Column(GUID, ForeignKey('cliente.id_cliente'), primary_key=True) 
 	#Relacion Many-to-Many con Estudiantes y se refleja en tabla Asignacion_Tareas
-	conce_est_tarea = relationship("Estudiante", secondary="asignacion_tarea", back_populates="est_conc_tarea") 	
+	conce_est_tarea = relationship("Estudiante", secondary="asignacion_tarea", back_populates="est_conc_tarea", cascade="all, delete") 	
 
 class Tipo_Tarea(Base):
 	__tablename__ = "tipo_tarea"
@@ -165,7 +165,7 @@ class Tipo_Tarea(Base):
 	id_tipo_tarea = Column(GUID, primary_key=True, default=GUID_DEFAULT_SQLITE) 
 	tarea_tipo_nombre = Column(String(50), unique=True, nullable=False, index=True) 
 	#Relacion con table padre
-	tarea_asignacion = relationship("Asignacion_Tarea", back_populates="tarea_tipo")
+	tarea_asignacion = relationship("Asignacion_Tarea", back_populates="tarea_tipo", cascade="all, delete")
 	
 class Asignacion_Tarea(Base):
 	__tablename__ = "asignacion_tarea"
@@ -184,9 +184,9 @@ class Asignacion_Tarea(Base):
 	asg_tipo_tarea_id = Column(GUID, ForeignKey("tipo_tarea.id_tipo_tarea"))
 	tarea_tipo = relationship("Tipo_Tarea", back_populates="tarea_asignacion")
 	#Relacion 1-M con tabla hija "Actividades_Tarea"
-	asg_actividades = relationship("Actividades_Tarea", back_populates="act_tarea")
+	asg_actividades = relationship("Actividades_Tarea", back_populates="act_tarea", cascade="all, delete")
 	#Relacion 1-M con tabla hija "Tareas_Actualizacion"
-	asg_actualizacion = relationship("Tareas_Actualizacion", back_populates="actualizacion_tarea")
+	asg_actualizacion = relationship("Tareas_Actualizacion", back_populates="actualizacion_tarea", cascade="all, delete")
 	#Id de la relacion entre Estudiante y Concertacion_Tema
 	asg_estudiante_id = Column(GUID, ForeignKey('estudiante.id_estudiante'), primary_key=True) 
 	asg_conc_id = Column(GUID, ForeignKey('concertacion_tema.id_conc_tema'), primary_key=True) 	
@@ -196,14 +196,14 @@ class Actividades_Tarea(Base):
 	
 	id_actividad_tarea = Column(GUID, primary_key=True, default=GUID_DEFAULT_SQLITE) 
 	act_nombre = Column(String(100), nullable=False, index=True) 
-	act_resultado = Column(String(15), nullable=True,  index=True) # Aceptada, Atrazada, Rechazada
+	act_resultado = Column(String(15), nullable=True,  index=True) # Aceptada, Atrazada
 	act_est_memo = Column(String(200), nullable=True,  index=True)
 	act_prof_memo = Column(String(200), nullable=True,  index=True)
 	act_cli_memo = Column(String(200), nullable=True,  index=True)
 	#Relacion M-1 con tabla padre "Asignacion_Tareas"
 	id_asg_act = Column(GUID, ForeignKey("asignacion_tarea.id_asignacion"))
 	act_tarea = relationship("Asignacion_Tarea", back_populates="asg_actividades")
-	
+	 
 class Tareas_Actualizacion(Base):
 	__tablename__ = "tareas_actualizacion"
 	
