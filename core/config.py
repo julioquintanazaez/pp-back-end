@@ -15,3 +15,17 @@ ADMIN_SAPELLIDO = getenv("ADMIN_SAPELLIDO")
 ADMIN_CI = getenv("ADMIN_CI")
 ADMIN_CORREO = getenv("ADMIN_CORREO")
 ADMIN_PASS = getenv("ADMIN_PASS")
+
+CORS_ORIGINS = [	
+	"http://practicasprofesionales.onrender.com",
+	"https://practicasprofesionales.onrender.com",		
+	"http://localhost",
+	"http://localhost:8080",
+	"https://localhost:8080",
+	"http://localhost:5000",
+	"https://localhost:5000",
+	"http://localhost:3000",
+	"https://localhost:3000",
+	"http://localhost:8000",
+	"https://localhost:8000",
+]
