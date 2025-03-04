@@ -161,11 +161,11 @@ SQLAlchemy==2.0.36
 sqlparse==0.4.4
 starlette==0.41.2
 sympy==1.13.1
-tensorboard==2.18.0
-tensorboard-data-server==0.7.2
-tensorflow==2.18.0
-tensorflow-io-gcs-filesystem==0.31.0
-tensorflow_intel==2.18.0
+tensorboard
+tensorboard-data-server
+tensorflow
+tensorflow-io-gcs-filesystem
+tensorflow_intel
 termcolor==2.3.0
 textual==0.83.0
 threadpoolctl==3.5.0
