@@ -10,7 +10,7 @@ from typing_extensions import Annotated
 from typing import Union
 from db.database import get_db
 from core import config
-from models.user import User
+from models.data import User
 from schemas.token import TokenData
 from schemas.user import User_InDB
 
@@ -72,7 +72,7 @@ async def get_current_user(
 			raise credentials_exception			
 		token_scopes = payload.get("scopes", [])
 		token_data = TokenData(scopes=token_scopes, usuario=usuario)
-		
+
 	except (JWTError, ValidationError):
 		raise credentials_exception
 
@@ -80,7 +80,7 @@ async def get_current_user(
 		raise credentials_exception
 	
 	user = get_user(db, usuario=token_data.usuario)
-	
+
 	if user is None:
 		raise credentials_exception
 		

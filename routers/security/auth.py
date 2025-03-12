@@ -25,7 +25,7 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 		)
 	access_token_expires = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
 	access_token = create_access_token(
-		data={"sub": user.nombre, "scopes": user.role},   #form_data.scopes
+		data={"sub": user.usuario, "scopes": user.role},   #form_data.scopes
 		expires_delta=access_token_expires
 	)
 	return {"detail": "Ok", "access_token": access_token, "token_type": "Bearer"}

@@ -3,7 +3,7 @@ from datetime import date
 from pydantic import BaseModel, EmailStr 
 
 
-class Centro_Practicas(BaseModel):	
+class Centro_PracticasAdd(BaseModel):	
 	centro_nombre : str
 	centro_siglas : str
 	centro_tec : str
@@ -13,9 +13,9 @@ class Centro_Practicas(BaseModel):
 			
 	class Config:
 		from_attributes = True
-		allow_population_by_field_name = True
+		populate_by_name = True
 		arbitrary_types_allowed = True	
 		
-class Centro_Practicas_InDB(Centro_Practicas):	
+class Centro_Practicas_InDB(Centro_PracticasAdd):	
 	id_centro : str	
 	

@@ -8,6 +8,9 @@ class User_Read(BaseModel):
 	nombre : Union[str, None] = None	
 	primer_appellido : Union[str, None] = None  
 	segundo_appellido : Union[str, None] = None 
+	genero : Union[str, None] = None 
+	estado_civil : Union[str, None] = None 
+	hijos : Union[bool, None] = None 
 	role: List[str] = ["usuario"]
 	class Config:
 		from_attributes = True

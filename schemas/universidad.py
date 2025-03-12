@@ -2,7 +2,7 @@ from typing import Union, Optional, List
 from datetime import date
 from pydantic import BaseModel, EmailStr 
 
-class Universidad(BaseModel):	
+class UniversidadAdd(BaseModel):	
 	universidad_nombre : str
 	universidad_siglas : str
 	universidad_tec : str
@@ -11,8 +11,8 @@ class Universidad(BaseModel):
 			
 	class Config:
 		from_attributes = True
-		allow_population_by_field_name = True
+		populate_by_name = True
 		arbitrary_types_allowed = True	
 		
-class Universidad_InDB(Universidad):	
+class Universidad_InDB(UniversidadAdd):	
 	id_universidad : str
