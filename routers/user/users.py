@@ -27,7 +27,7 @@ async def leer_usuarios(usuario_actual: Annotated[User_InDB, Security(get_curren
 @router.delete("/eliminar_usuario/{usuario}", status_code=status.HTTP_201_CREATED) 
 async def eliminar_usuario(usuario_actual: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
 				usuario: str, db: Session = Depends(get_db)):
-	db_user = db.query(User).filter(User_List.usuario == usuario).first()
+	db_user = db.query(User).filter(User.usuario == usuario).first()
 	if db_user is None:
 		raise HTTPException(status_code=404, detail="Usuario no encontrado")	
 	if usuario != usuario_actual.usuario:
@@ -72,7 +72,7 @@ async def actualizar_contrasenna(usuario_actual: Annotated[User_InDB, Security(g
 	db_user = db.query(User).filter(User.usuario == usuario).first()
 	if db_user is None:
 		raise HTTPException(status_code=404, detail="Usuario no encontrado en la base de datos")	
-	db_user.hashed_password=pwd_context.hash(password.hashed_password)
+	db_user.hashed_password=pwd_context.hash(password.newpassword)
 	db.commit()
 	db.refresh(db_user)	
 	return {"Resultado": "Contraseña actualizada satisfactoriamente"}

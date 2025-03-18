@@ -18,7 +18,9 @@ ADMIN_PASS = getenv("ADMIN_PASS")
 
 CORS_ORIGINS = [	
 	"http://practicasprofesionales.onrender.com",
-	"https://practicasprofesionales.onrender.com",		
+	"https://practicasprofesionales.onrender.com",	
+	"http://localhost:4173/",
+	"https://localhost:4173/",	
 	"http://localhost",
 	"http://localhost:8080",
 	"https://localhost:8080",
@@ -28,4 +30,6 @@ CORS_ORIGINS = [
 	"https://localhost:3000",
 	"http://localhost:8000",
 	"https://localhost:8000",
+	"http://127.0.0.1:8000",
+	"https://127.0.0.1:8000"
 ]
