@@ -18,7 +18,7 @@ ADMIN_PASS = getenv("ADMIN_PASS")
 
 CORS_ORIGINS = [	
 	"https://unica-profesionales.onrender.com",
-	"https://unica-profesionales.onrender.com",    	
+	"http://unica-profesionales.onrender.com",    	
 	"http://localhost:4173/",
 	"https://localhost:4173/",	
 	"http://localhost",
