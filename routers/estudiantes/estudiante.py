@@ -21,8 +21,9 @@ async def crear_estudiante(current_user: Annotated[User_InDB, Security(get_curre
 			est_pos_tecnica_escuela = estudiante.est_pos_tecnica_escuela,
 			est_pos_tecnica_hogar = estudiante.est_pos_tecnica_hogar,
 			est_trab_remoto = estudiante.est_trab_remoto,
-			est_entidad_id = estudiante.est_entidad_id,	
-			user_estudiante_id = estudiante.user_estudiante_id
+			est_universidad_id = estudiante.est_universidad_id,	
+			user_estudiante_id = estudiante.user_estudiante_id,
+			tareas_estudiantes_id = estudiante.tareas_estudiantes_id
 		)			
 		db.add(db_estudiante)   	
 		db.commit()
@@ -34,8 +35,8 @@ async def crear_estudiante(current_user: Annotated[User_InDB, Security(get_curre
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Estudiante")		
 
 
-@router.get("/leer_estudiante/", status_code=status.HTTP_201_CREATED)  
-async def leer_estudiante(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
+@router.get("/leer_estudiantes/", status_code=status.HTTP_201_CREATED)  
+async def leer_estudiantes(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
 
 		return db.query(Estudiante).offset(skip).limit(limit).all() 
@@ -49,7 +50,6 @@ async def eliminar_estudiante(current_user: Annotated[User_InDB, Security(get_cu
 		raise HTTPException(status_code=404, detail="El estudiante no existe en la base de datos")	
 	db.delete(db_estudiante)	
 	db.commit()
-	db.refresh(db_estudiante)	
 	return {"Result": "Estudiante eliminado satisfactoriamente"}
 	
 

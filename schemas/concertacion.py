@@ -9,7 +9,6 @@ class Concertacion_Record(BaseModel):
 	conc_valoracion_cliente : str 
 	conc_complejidad : str #Alta, Baja, Media
 	conc_actores_externos : int
-	conc_activa : bool
 		
 	class Config:
 		from_attributes = True
@@ -22,6 +21,7 @@ class ConcertacionAdd(Concertacion_Record):
 		
 class Concertacion_InDB(ConcertacionAdd):
 	id_conc_tema : str	
+	conc_activa : bool
 	conc_evaluacion : Union[str, None] = None
 	conc_evaluacion_pred : Union[str, None] = None
 

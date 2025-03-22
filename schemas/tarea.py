@@ -8,7 +8,7 @@ class Tarea_Record(BaseModel):
 	tarea_fecha_inicio : date
 	tarea_fecha_fin : date
 	tarea_complejidad_estimada : str
-	tarea_participantes : int #N�mero de miembros en el equipo
+	tarea_participantes : int 
 	
 	class Config:
 		from_attributes = True
@@ -16,8 +16,7 @@ class Tarea_Record(BaseModel):
 		arbitrary_types_allowed = True	
 
 class TareaAdd(Tarea_Record):		
-	tarea_estudiante_id : str
-	tarea_conc_id : str
+	concertacion_tarea_id : str
 	
 class Tarea_InDB(TareaAdd):	
 	id_tarea : str	

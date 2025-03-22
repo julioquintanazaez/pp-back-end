@@ -15,12 +15,12 @@ async def crear_centropracticas(current_user: Annotated[User_InDB, Security(get_
 					practicas: Centro_PracticasAdd, db: Session = Depends(get_db)):
 	try:
 		db_practicas = Centro_Practicas(
-			centro_nombre = practicas.dest_nombre,
-			centro_siglas = practicas.dest_siglas,
-			centro_tec = practicas.dest_nivel_tecnologico,
-			centro_transp = practicas.dest_transporte,
-			centro_experiencia = practicas.dest_experiencia,
-			centro_teletrab = practicas.dest_trab_remoto
+			centro_nombre = practicas.centro_nombre,
+			centro_siglas = practicas.centro_siglas,
+			centro_tec = practicas.centro_tec,
+			centro_transp = practicas.centro_transp,
+			centro_experiencia = practicas.centro_experiencia,
+			centro_teletrab = practicas.centro_teletrab
 		)			
 		db.add(db_practicas)   	
 		db.commit()

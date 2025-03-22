@@ -9,7 +9,7 @@ from typing_extensions import Annotated
 
 router = APIRouter()
 
-@router.post("/usuario/", status_code=status.HTTP_201_CREATED)
+@router.post("/crear_usuario/", status_code=status.HTTP_201_CREATED)
 async def create_user(user: User_Record, db: Session = Depends(get_db)): 
     user.hashed_password = get_password_hash(user.hashed_password)
     db_user = User(**user.dict())
@@ -77,4 +77,16 @@ async def actualizar_contrasenna(usuario_actual: Annotated[User_InDB, Security(g
 	db.refresh(db_user)	
 	return {"Resultado": "Contraseña actualizada satisfactoriamente"}
 
-
+@router.get("/obtener_usuarios/{categoria}", status_code=status.HTTP_201_CREATED) 
+async def obtener_usuarios(usuario_actual: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
+		categoria: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    	
+	roles_permitidos = ["admin", "estudiante", "profesor", "cliente", "usuario"]
+	if categoria not in roles_permitidos:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=f"Categoría inválida. Opciones válidas: {', '.join(roles_permitidos)}"
+		)
+	db_users_categoria = db.query(User).filter(
+		User.role.contains(categoria)  #User.role.contains([categoria])
+	).offset(skip).limit(limit).all()
+	return db_users_categoria

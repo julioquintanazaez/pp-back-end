@@ -9,15 +9,16 @@ class Estudiante_Record(BaseModel):
 	est_pos_tecnica_escuela : str
 	est_pos_tecnica_hogar : str
 	est_trab_remoto : bool	
-
+ 
 	class Config:
 		from_attributes = True
 		populate_by_name = True
 		arbitrary_types_allowed = True	
 		
 class EstudianteAdd(Estudiante_Record):
-	est_entidad_id : str	
+	est_universidad_id : str	
 	user_estudiante_id : str
+	tareas_estudiantes_id: str
 
 class Estudiante_InDB(EstudianteAdd):	
 	id_estudiante : str	

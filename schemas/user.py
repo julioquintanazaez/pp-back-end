@@ -11,7 +11,7 @@ class User_Read(BaseModel):
 	genero : Union[str, None] = None 
 	estado_civil : Union[str, None] = None 
 	hijos : Union[bool, None] = None 
-	role: List[str] = ["usuario"]
+	role: List[str] = ["admin", "profesor", "cliente", "estudiante"]
 	class Config:
 		from_attributes = True
 		populate_by_name = True
@@ -31,5 +31,4 @@ class User_Activate(BaseModel):
 	deshabilitado: Union[bool, None] = None
 		
 class User_ResetPassword(BaseModel):
-	actualpassword: str
 	newpassword: str
