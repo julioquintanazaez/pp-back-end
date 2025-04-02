@@ -8,6 +8,9 @@ from typing_extensions import Annotated
 from schemas.user import User_InDB
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.orm import joinedload
+import pandas as pd
+import joblib
+from core import config
 
 router = APIRouter()
 
@@ -73,18 +76,6 @@ async def evaluar_tarea(current_user: Annotated[User_InDB, Security(get_current_
 	db.commit()
 	db.refresh(db_tarea)	
 	return db_tarea
-
-@router.get("/prediccion_tarea/{id}", status_code=status.HTTP_201_CREATED) 
-async def prediccion_tarea(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["profesor"])], 
-				id: str, db: Session = Depends(get_db)):
-	db_tarea = db.query(Tarea).filter(Tarea.id_tarea == id).first()
-	if db_tarea is None:
-		raise HTTPException(status_code=404, detail="Tarea no existe ne la base de datos")
-	# Lógica aqui para extraer los valores de la consulta y aplicar un clasificador
-	db_tarea.tarea_evaluacion_pred = "Mejorable"	
-	db.commit()
-	db.refresh(db_tarea)
-	return {"clase": "Mejorable"}
 
 @router.get("/leer_tarea_estudiante/", status_code=status.HTTP_201_CREATED)  
 async def leer_tarea_estudiante(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["estudiante"])],
@@ -478,3 +469,60 @@ async def leer_tareas(current_user: Annotated[User_InDB, Security(get_current_us
     ] 
     
 	return result	
+
+@router.get("/prediccion_tarea/{id}", status_code=status.HTTP_201_CREATED)
+async def prediccion_tarea(current_user: Annotated[User_InDB, Depends(get_current_user)],
+					id: str, db: Session = Depends(get_db)):
+	
+	#Datos Estudiante
+	est_query = db.query(
+		User.id.label('est_user_id'),
+		User.estado_civil.label('est_estadocivil'),
+		User.genero.label('est_genero'),
+		User.hijos.label('est_hijos'),
+	).select_from(
+		User
+	).subquery()
+	
+	#Datos para predecir las actividades de tareas			
+	db_tarea = db.query(
+		#Datos de Concertacion
+		Concertacion_Tema.conc_actores_externos,
+		Concertacion_Tema.conc_complejidad,
+		#Datos de estudiante
+		Estudiante.est_becado,
+		Estudiante.est_pos_tecnica_escuela,
+		Estudiante.est_pos_tecnica_hogar,
+		Estudiante.est_posibilidad_economica,
+		Estudiante.est_trab_remoto,
+		Estudiante.est_trabajo,
+		#Datos de tareas
+		Tarea.tarea_complejidad_estimada,
+		Tarea.tarea_participantes,
+		Tarea.tarea_tipo
+		).select_from(Tarea
+		).join(Concertacion_Tema, Concertacion_Tema.id_conc_tema == Tarea.concertacion_tarea_id
+		).join(Estudiante, Estudiante.tareas_estudiantes_id == Tarea.id_tarea
+		).join(est_query, est_query.c.est_user_id == Estudiante.user_estudiante_id	
+		).join(Profesor, Profesor.id_profesor == Concertacion_Tema.conc_profesor_id	
+		).join(Cliente, Cliente.id_cliente == Concertacion_Tema.conc_cliente_id	
+		).where(Tarea.id_tarea == id
+		).statement
+				
+	#Preparando datos
+	datos = pd.read_sql(db_tarea, con=engine)
+	#Leer modelo
+	loaded_modelo = joblib.load(config.UPLOAD_TRAIN_MODELS_PATH + 'tarea_rf_model.pkl')
+	#Realizar prediccion
+	if datos.empty:
+		raise HTTPException(status_code=404, detail="No existen ejemplos para predecir")
+		
+	prediccion = loaded_modelo.predict(datos)
+	prob = loaded_modelo.predict_proba(datos)
+	resdic = {
+		"clase": prediccion[0],
+		"prob1": prob[0][0],
+		"prob2": prob[0][1]
+	}
+
+	return resdic

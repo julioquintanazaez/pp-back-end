@@ -35,3 +35,6 @@ CORS_ORIGINS = [
     "http://127.0.0.1:5000",
 	"https://127.0.0.1:5000"
 ]
+
+UPLOAD_TRAIN_FILES_PATH: str = "uploads/"
+UPLOAD_TRAIN_MODELS_PATH: str = "train_files/"
