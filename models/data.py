@@ -60,7 +60,7 @@ class Profesor(Base):
 
 	prf_universidad_id = Column(GUID, ForeignKey("universidad.id_universidad"))
 	prf_universidad = relationship("Universidad", back_populates="profesores")	
-	user_profesor_id = Column(GUID, ForeignKey("user.id"))
+	user_profesor_id = Column(GUID, ForeignKey("user.id"), unique=True)
 	user_profesor = relationship("User", back_populates="profesor")
 	
 	profesor_concertacion = relationship("Cliente", secondary="concertacion_tema", back_populates="cliente_concertacion", cascade="all, delete") 	
@@ -107,7 +107,7 @@ class Cliente(Base):
 
 	cli_centro_id = Column(GUID, ForeignKey("centro_practicas.id_centro"))
 	cli_centro_practicas = relationship("Centro_Practicas", back_populates="clientes")
-	user_cliente_id = Column(GUID, ForeignKey("user.id"))
+	user_cliente_id = Column(GUID, ForeignKey("user.id"), unique=True)
 	user_cliente = relationship("User", back_populates="cliente")
 	
 	cliente_concertacion = relationship("Profesor", secondary="concertacion_tema", back_populates="profesor_concertacion", cascade="all, delete") 	
@@ -161,7 +161,7 @@ class Estudiante(Base): #Addicionar CI a todos los actores
 	est_trab_remoto = Column(Boolean, nullable=False, index=True) 
 	est_ocupado = Column(Boolean, nullable=True, index=True, default=False) 
 
-	user_estudiante_id = Column(GUID, ForeignKey("user.id"))
+	user_estudiante_id = Column(GUID, ForeignKey("user.id"), unique=True)
 	user_estudiante = relationship("User", back_populates="estudiante")
 	est_universidad_id = Column(GUID, ForeignKey("universidad.id_universidad"))
 	est_universidad = relationship("Universidad", back_populates="estudiantes")

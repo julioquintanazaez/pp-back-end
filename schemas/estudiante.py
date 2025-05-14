@@ -1,6 +1,7 @@
 from typing import Union, Optional, List
 from datetime import date
 from pydantic import BaseModel, EmailStr 
+from uuid import UUID
 
 class Estudiante_Record(BaseModel):
 	est_trabajo : bool  
@@ -26,3 +27,24 @@ class Estudiante_InDB(EstudianteAdd):
 
 class Estudiante_Activo(BaseModel):	
 	est_ocupado: bool
+
+class EstudianteSchema(BaseModel):
+	id_estudiante: UUID
+	est_trabajo : bool
+	est_becado : bool
+	est_posibilidad_economica : str
+	est_pos_tecnica_escuela : str
+	est_pos_tecnica_hogar : str
+	est_trab_remoto : bool 
+	usuario_id: UUID
+	ci: str
+	nombre: str
+	primer_appellido: str
+	segundo_appellido: str
+	email: str
+	id_tarea: UUID
+	tarea_tipo: str
+	tarea_descripcion: str
+
+	class Config:
+		from_attributes = True  # Permite que Pydantic trabaje con objetos ORM

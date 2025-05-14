@@ -33,7 +33,7 @@ async def crear_cliente(current_user: Annotated[User_InDB, Security(get_current_
 		db.refresh(db_cliente)
 		return db_cliente 
 	except IntegrityError as e:
-		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Cliente")
+		raise HTTPException(status_code=500, detail="El cliente ya existe en la base de datos")
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error inesperado creando el objeto Cliente")		
 

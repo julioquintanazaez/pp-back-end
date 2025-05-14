@@ -32,7 +32,7 @@ async def crear_profesor(current_user: Annotated[User_InDB, Security(get_current
 		db.commit()
 		return db_profesor		
 	except IntegrityError as e:
-		raise HTTPException(status_code=500, detail="Error de integridad creando objeto Profesor")
+		raise HTTPException(status_code=500, detail="El profesor ya existe en la base de datos")
 	except SQLAlchemyError as e: 
 		raise HTTPException(status_code=405, detail="Error SQLAlchemy creando el objeto Profesor")		
 

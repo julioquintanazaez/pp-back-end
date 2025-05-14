@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Security
 from sqlalchemy.orm import Session
 from db.database import SessionLocal, engine, get_db
 from models.data import Tarea, Profesor, Concertacion_Tema, Cliente, Estudiante, User
-from schemas.tarea import Tarea_Record, TareaAdd, Tarea_InDB, Tarea_Eval
+from schemas.tarea import Tarea_Record, TareaAdd, Tarea_InDB, Tarea_Eval, TareaSchema
 from security.auth import get_current_active_user, get_current_user
 from typing_extensions import Annotated
 from schemas.user import User_InDB
@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 import pandas as pd
 import joblib
 from core import config
+from typing import List
 
 router = APIRouter()
 
@@ -345,6 +346,7 @@ async def leer_tareas_profesor(current_user: Annotated[User_InDB, Security(get_c
     
 	return result	
 
+
 @router.get("/leer_tareas/", status_code=status.HTTP_201_CREATED)  
 async def leer_tareas(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
 					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
@@ -526,3 +528,9 @@ async def prediccion_tarea(current_user: Annotated[User_InDB, Depends(get_curren
 	}
 
 	return resdic
+
+
+@router.get("/leer_tareas_contenido/", status_code=status.HTTP_201_CREATED)  
+async def leer_tareas_contenido(current_user: Annotated[User_InDB, Security(get_current_user, scopes=["admin"])],
+					skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):    
+	return db.query(Tarea).all()
